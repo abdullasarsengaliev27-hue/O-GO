@@ -1,30 +1,35 @@
 {
   "expo": {
-    "name": "o-go",
+    "name": "O-GO",
     "slug": "o-go",
     "version": "1.0.0",
+    "scheme": "o-go",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FF4500"
     },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.teamogo.ogo",
+      "supportsTablet": false,
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.723671040157-ufo3l8g9s5hc914em5g41m728v2590u9"
+            ]
+          }
+        ]
+      }
     },
     "android": {
+      "package": "com.teamogo.ogo",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+        "backgroundColor": "#FF4500"
+      }
     }
   }
 }
