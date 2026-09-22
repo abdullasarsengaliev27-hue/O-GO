@@ -17,8 +17,9 @@ import { SellerApplicationScreen } from './SellerApplicationScreen';
 import { AdminScreen } from './AdminScreen';
 import { KaspiSettingsScreen } from './seller/KaspiSettingsScreen';
 import { BuyerChatsScreen } from './BuyerChatsScreen';
+import { PromotionScreen } from './seller/PromotionScreen';
 
-type ScreenType = 'profile' | 'add' | 'stats' | 'chats' | 'orders' | 'sellerOrders' | 'savings' | 'happyHours' | 'kaspiSettings' | 'buyerChats';
+type ScreenType = 'profile' | 'add' | 'stats' | 'chats' | 'orders' | 'sellerOrders' | 'savings' | 'happyHours' | 'kaspiSettings' | 'buyerChats' | 'promotion';
 
 export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   user: User | null,
@@ -96,6 +97,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     if (screen === 'savings') return <View style={{ flex: 1 }}><BackBtn /><SavingsScreen user={user} /></View>;
     if (screen === 'happyHours') return <View style={{ flex: 1 }}><BackBtn /><HappyHoursScreen user={user} /></View>;
     if (screen === 'kaspiSettings') return <View style={{ flex: 1 }}><BackBtn /><KaspiSettingsScreen user={user} /></View>;
+    if (screen === 'promotion') return <View style={{ flex: 1 }}><BackBtn /><PromotionScreen user={user} /></View>;
     if (screen === 'buyerChats') return <View style={{ flex: 1 }}><BackBtn /><BuyerChatsScreen user={user} /></View>;
 
     // Профиль продавца
@@ -256,6 +258,20 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
           </TouchableOpacity>
     
           <TouchableOpacity
+  style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, marginBottom: 10 }}
+  onPress={() => setScreen('promotion')}
+>
+  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
+    <Text style={{ fontSize: 22 }}>⚡</Text>
+  </View>
+  <View style={{ flex: 1 }}>
+    <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Продвижение</Text>
+    <Text style={{ color: '#999', fontSize: 12 }}>Турбо-буст, баннер, карта</Text>
+  </View>
+  <Ionicons name="chevron-forward" size={18} color="#ccc" />
+</TouchableOpacity>
+
+          <TouchableOpacity
             style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 }}
             onPress={() => setScreen('kaspiSettings' as any)}
           >
@@ -357,6 +373,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
           </TouchableOpacity>
         </View>
     
+
         {/* Настройки */}
         <View style={{ marginHorizontal: 16, gap: 10, marginBottom: 24 }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8 }}>

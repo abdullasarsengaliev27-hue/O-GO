@@ -34,6 +34,22 @@ export function DealCard({ item, user, onStorePress }: {
   }, [user, item.id]);
 
   useEffect(() => {
+    if (!item.id) return;
+    const { updateDoc, increment } = require('firebase/firestore');
+    updateDoc(doc(db, 'deals', item.id), {
+      viewCount: increment(1)
+    }).catch(() => {});
+  }, [item.id]);
+
+  useEffect(() => {
+    // Считаем просмотр
+    const viewRef = doc(db, 'deals', item.id);
+    import('firebase/firestore').then(({ updateDoc, increment }) => {
+      updateDoc(viewRef, { viewCount: increment(1) }).catch(() => {});
+    });
+  }, [item.id]);
+
+  useEffect(() => {
     return onSnapshot(collection(db, 'deals', item.id, 'reviews'), snap => {
       const revs = snap.docs.map(d => d.data());
       setReviewCount(revs.length);

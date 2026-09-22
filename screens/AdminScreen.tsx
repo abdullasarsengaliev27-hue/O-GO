@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
 import { styles } from '../components/styles';
@@ -23,6 +23,59 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [promotionRequests, setPromotionRequests] = useState<any[]>([]);
+
+  {promotionRequests.map((p: any) => (
+    <View key={p.id} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10, elevation: 2 }}>
+      <Text style={{ fontWeight: '700', fontSize: 15, color: '#1a1a1a' }}>{p.promoTitle}</Text>
+      <Text style={{ color: '#999', fontSize: 13 }}>✉️ {p.sellerEmail}</Text>
+      <Text style={{ color: '#FF4500', fontWeight: '700', fontSize: 14, marginTop: 4 }}>
+        {p.planLabel} · {p.price?.toLocaleString()} ₸
+      </Text>
+      {p.dealTitle && (
+        <Text style={{ color: '#666', fontSize: 13 }}>🎯 Публикация: {p.dealTitle}</Text>
+      )}
+      {p.receiptImage && (
+        <View style={{ marginTop: 10, marginBottom: 10 }}>
+          <Text style={{ fontWeight: '700', color: '#FF9800', marginBottom: 6 }}>📸 Чек об оплате:</Text>
+          <Image source={{ uri: p.receiptImage }} style={{ width: '100%', height: 200, borderRadius: 12 }} resizeMode="contain" />
+        </View>
+      )}
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: '#4CAF50', borderRadius: 10, padding: 12, alignItems: 'center' }}
+          onPress={async () => {
+            const hours = p.planId?.includes('24h') ? 24 : p.planId?.includes('3d') ? 72 : 168;
+            const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+            await updateDoc(doc(db, 'promotions', p.id), {
+              status: 'approved',
+              expiresAt,
+              approvedAt: new Date().toISOString(),
+            });
+            // Если турбо-буст — помечаем скидку
+            if (p.type === 'turbo' && p.dealId) {
+              await updateDoc(doc(db, 'deals', p.dealId), {
+                isBoosted: true,
+                boostedUntil: expiresAt,
+              });
+            }
+            Alert.alert('✅ Продвижение активировано!');
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>✅ Одобрить</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 10, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#FF4500' }}
+          onPress={async () => {
+            await updateDoc(doc(db, 'promotions', p.id), { status: 'rejected' });
+            Alert.alert('❌ Отклонено');
+          }}
+        >
+          <Text style={{ color: '#FF4500', fontWeight: '700' }}>❌ Отклонить</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  ))}
 
   useEffect(() => {
     return onSnapshot(collection(db, 'sellerApplications'), snap => {
@@ -65,6 +118,14 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
     }
     setProcessingId(null);
   };
+
+  
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(db, 'promotions'), where('status', '==', 'pending')),
+      snap => setPromotionRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+  }, []);
 
   const rejectApplication = (app: any) => {
     Alert.alert('Отклонить заявку?', `${app.storeName} — ${app.fullName}`, [
@@ -149,16 +210,18 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         )}
       </View>
 
-      {/* Фильтры */}
-      <View style={{ flexDirection: 'row', padding: 12, gap: 8 }}>
-        {(['pending', 'approved', 'rejected'] as const).map(f => (
-          <TouchableOpacity key={f} onPress={() => setFilter(f)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: filter === f ? '#FF4500' : '#fff', alignItems: 'center' }}>
-            <Text style={{ color: filter === f ? '#fff' : '#666', fontWeight: '600', fontSize: 12 }}>
-              {f === 'pending' ? `⏳ Новые (${pendingCount})` : f === 'approved' ? '✅ Одобрены' : '❌ Отклонены'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+     
+
+{/* Вкладки */}
+<View style={{ flexDirection: 'row', padding: 12, gap: 8 }}>
+  {(['pending', 'approved', 'rejected'] as const).map(f => (
+    <TouchableOpacity key={f} onPress={() => setFilter(f)} style={{ flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: filter === f ? '#FF4500' : '#fff', alignItems: 'center' }}>
+      <Text style={{ color: filter === f ? '#fff' : '#666', fontWeight: '600', fontSize: 12 }}>
+        {f === 'pending' ? `⏳ Новые (${pendingCount})` : f === 'approved' ? '✅ Одобрены' : '❌ Отклонены'}
+      </Text>
+    </TouchableOpacity>
+  ))}
+</View>
 
       {loading ? <ActivityIndicator size="large" color="#FF4500" style={{ marginTop: 40 }} /> : (
         <ScrollView contentContainerStyle={{ padding: 12 }}>

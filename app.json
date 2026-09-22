@@ -30,6 +30,16 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FF4500"
       }
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b40b9b73-552d-491c-98ea-ff40745bfbdf"
+      }
+    },
+    "plugins": [
+      "expo-splash-screen",
+      "expo-status-bar",
+      "expo-web-browser"
+    ]
   }
 }
