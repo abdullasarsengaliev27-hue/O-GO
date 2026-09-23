@@ -15,9 +15,11 @@ export const STATUS_INFO: Record<string, { label: string, emoji: string, color: 
   sent:      { label: 'Передан курьеру', emoji: '🚚', color: '#9C27B0' },
   delivered: { label: 'Доставлен',        emoji: '🎉', color: '#4CAF50' },
   awaiting_payment_confirmation: { label: 'Ожидает оплаты', emoji: '💳', color: '#FF9800' },
+  buyer_confirmed: { label: 'Получено', emoji: '✅', color: '#4CAF50' },
+  
 };
 
-const STATUS_STEPS: string[] = ['pending', 'accepted', 'packed', 'sent', 'delivered'];
+const STATUS_STEPS: string[] = ['pending', 'accepted', 'packed', 'sent', 'delivered', 'buyer_confirmed'];
 
 function StatusProgress({ status, deliveryInfo }: { status: string, deliveryInfo?: any }) {
   const currentIndex = STATUS_STEPS.indexOf(status);
@@ -153,14 +155,56 @@ function BuyerOrderCard({ order }: { order: any }) {
           </View>
         )}
 
-        {status === 'delivered' && (
-          <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, marginTop: 8, alignItems: 'center' }}>
-            <Text style={{ fontSize: 28, marginBottom: 4 }}>🎉</Text>
-            <Text style={{ color: '#2E7D32', fontWeight: '800', fontSize: 15 }}>Товар доставлен!</Text>
-            <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2 }}>Спасибо за заказ в O-GO</Text>
-          </View>
-        )}
+{status === 'delivered' && (
+  <View style={{ marginTop: 8 }}>
+    <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#FFD700' }}>
+      <Text style={{ fontSize: 28, marginBottom: 4 }}>📦</Text>
+      <Text style={{ color: '#333', fontWeight: '800', fontSize: 15 }}>Курьер доставил товар!</Text>
+      <Text style={{ color: '#666', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Вы получили заказ? Подтвердите получение</Text>
+    </View>
+    <TouchableOpacity
+      style={{ backgroundColor: '#4CAF50', borderRadius: 14, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+      onPress={async () => {
+        Alert.alert(
+          '📦 Подтвердить получение?',
+          'Вы точно получили товар в хорошем состоянии?\n\n⚠️ После подтверждения заказ будет закрыт.',
+          [
+            {
+              text: '❌ Нет, есть проблема',
+              style: 'destructive',
+              onPress: () => Alert.alert(
+                '⚠️ Проблема с заказом',
+                'Пожалуйста, свяжитесь с продавцом через чат и опишите проблему.',
+                [{ text: 'Написать продавцу', onPress: () => {} }, { text: 'OK' }]
+              )
+            },
+            {
+              text: '✅ Да, получил!',
+              onPress: async () => {
+                await updateDoc(doc(db, 'orders', order.id), {
+                  status: 'buyer_confirmed',
+                  buyerConfirmedAt: new Date().toISOString(),
+                });
+                Alert.alert('🎉 Отлично!', 'Заказ успешно завершён!\nСпасибо что пользуетесь O-GO!');
+              }
+            }
+          ]
+        );
+      }}
+    >
+      <Ionicons name="checkmark-circle" size={22} color="#fff" />
+      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>✅ Получил товар!</Text>
+    </TouchableOpacity>
+  </View>
+)}
 
+{status === 'buyer_confirmed' && (
+  <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, marginTop: 8, alignItems: 'center' }}>
+    <Text style={{ fontSize: 28, marginBottom: 4 }}>🎉</Text>
+    <Text style={{ color: '#2E7D32', fontWeight: '800', fontSize: 15 }}>Заказ завершён!</Text>
+    <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2 }}>Спасибо за заказ в O-GO</Text>
+  </View>
+)}
         {status === 'awaiting_payment_confirmation' && (
           <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 12, marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="time" size={18} color="#FF9800" />
@@ -360,9 +404,20 @@ function SellerOrderCard({ order }: { order: any }) {
               </TouchableOpacity>
             )
           ) : (
-            <View style={{ backgroundColor: '#E8F5E9', borderRadius: 14, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-              <Text style={{ color: '#2E7D32', fontWeight: '700', fontSize: 15 }}>Заказ выполнен!</Text>
+            <View>
+              {status === 'delivered' && (
+                <View style={{ backgroundColor: '#FFF9E6', borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#FFD700' }}>
+                  <Ionicons name="time" size={20} color="#FF9800" />
+                  <Text style={{ color: '#E65100', fontWeight: '700', fontSize: 14, marginTop: 4 }}>Ожидаем подтверждения покупателя</Text>
+                  <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Покупатель должен подтвердить получение</Text>
+                </View>
+              )}
+              {status === 'buyer_confirmed' && (
+                <View style={{ backgroundColor: '#E8F5E9', borderRadius: 14, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+                  <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                  <Text style={{ color: '#2E7D32', fontWeight: '700', fontSize: 15 }}>🎉 Заказ завершён обеими сторонами!</Text>
+                </View>
+              )}
             </View>
           )}
         </View>
@@ -383,8 +438,8 @@ export function BuyerOrdersScreen({ user }: { user: User }) {
     });
   }, [user]);
 
-  const activeOrders = orders.filter(o => o.status !== 'delivered');
-  const displayed = filter === 'active' ? activeOrders : orders;
+  const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'buyer_confirmed');
+    const displayed = filter === 'active' ? activeOrders : orders;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
@@ -429,8 +484,8 @@ export function SellerOrdersScreen({ user }: { user: User }) {
     });
   }, [user]);
 
-  const activeOrders = orders.filter(o => o.status !== 'delivered');
-  const displayed = filter === 'active' ? activeOrders : orders;
+  const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'buyer_confirmed');
+    const displayed = filter === 'active' ? activeOrders : orders;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} contentContainerStyle={{ padding: 16 }}>
