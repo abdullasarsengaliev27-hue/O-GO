@@ -45,8 +45,7 @@ const PROMOTIONS = [
   },
 ];
 
-export function PromotionScreen({ user }: { user: User }): JSX.Element {
-  const [activePromotions, setActivePromotions] = useState<any[]>([]);
+export function PromotionScreen({ user }: { user: User }) {  const [activePromotions, setActivePromotions] = useState<any[]>([]);
   const [myDeals, setMyDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPromo, setSelectedPromo] = useState<any>(null);

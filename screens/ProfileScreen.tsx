@@ -68,9 +68,12 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     if (!user) return;
     const field = userRole === 'seller' ? 'sellerId' : 'buyerId';
     const q = query(collection(db, 'orders'), where(field, '==', user.uid));
-    return onSnapshot(q, snap => {
-      setActiveOrdersCount(snap.docs.filter(d => d.data().status !== 'delivered').length);
-    });
+return onSnapshot(q, snap => {
+  setActiveOrdersCount(snap.docs.filter(d => 
+    d.data().status !== 'delivered' && 
+    d.data().status !== 'buyer_confirmed'
+  ).length);
+});
   }, [user, userRole]);
 
   useEffect(() => {

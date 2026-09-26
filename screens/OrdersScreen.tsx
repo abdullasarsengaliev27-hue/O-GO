@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { styles } from '../components/styles';
 
-export type OrderStatus = 'pending' | 'accepted' | 'packed' | 'sent' | 'delivered';
+export type OrderStatus = 'pending' | 'accepted' | 'packed' | 'sent' | 'delivered' | 'buyer_confirmed';
 
 export const STATUS_INFO: Record<string, { label: string, emoji: string, color: string }> = {
   pending:   { label: 'Ожидает',         emoji: '⏳', color: '#999' },
@@ -14,18 +14,18 @@ export const STATUS_INFO: Record<string, { label: string, emoji: string, color: 
   packed:    { label: 'Упакован',         emoji: '📦', color: '#FF9800' },
   sent:      { label: 'Передан курьеру', emoji: '🚚', color: '#9C27B0' },
   delivered: { label: 'Доставлен',        emoji: '🎉', color: '#4CAF50' },
+  buyer_confirmed: { label: 'Получено',   emoji: '✅', color: '#4CAF50' },
   awaiting_payment_confirmation: { label: 'Ожидает оплаты', emoji: '💳', color: '#FF9800' },
-  buyer_confirmed: { label: 'Получено', emoji: '✅', color: '#4CAF50' },
-  
 };
 
 const STATUS_STEPS: string[] = ['pending', 'accepted', 'packed', 'sent', 'delivered', 'buyer_confirmed'];
 
 function StatusProgress({ status, deliveryInfo }: { status: string, deliveryInfo?: any }) {
-  const currentIndex = STATUS_STEPS.indexOf(status);
+  const visibleSteps = ['pending', 'accepted', 'packed', 'sent', 'delivered'];
+  const currentIndex = visibleSteps.indexOf(status === 'buyer_confirmed' ? 'delivered' : status);
   return (
     <View style={{ marginVertical: 12 }}>
-      {STATUS_STEPS.map((step, i) => {
+      {visibleSteps.map((step, i) => {
         const info = STATUS_INFO[step];
         const done = i < currentIndex;
         const active = i === currentIndex;
@@ -48,11 +48,11 @@ function StatusProgress({ status, deliveryInfo }: { status: string, deliveryInfo
                   <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#ddd' }} />
                 )}
               </View>
-              {i < STATUS_STEPS.length - 1 && (
+              {i < visibleSteps.length - 1 && (
                 <View style={{ width: 2, height: 28, backgroundColor: done ? '#FF4500' : '#eee', marginTop: 2 }} />
               )}
             </View>
-            <View style={{ flex: 1, paddingTop: 8, paddingBottom: i < STATUS_STEPS.length - 1 ? 16 : 0 }}>
+            <View style={{ flex: 1, paddingTop: 8, paddingBottom: i < visibleSteps.length - 1 ? 16 : 0 }}>
               <Text style={{
                 fontWeight: active ? '800' : done ? '600' : '400',
                 color: active ? '#FF4500' : done ? '#1a1a1a' : '#aaa',
@@ -84,6 +84,7 @@ function StatusProgress({ status, deliveryInfo }: { status: string, deliveryInfo
 function BuyerOrderCard({ order }: { order: any }) {
   const status = order.status as string;
   const info = STATUS_INFO[status] || STATUS_INFO['pending'];
+  const [showProblemChat, setShowProblemChat] = useState(false);
 
   return (
     <View style={{ backgroundColor: '#fff', borderRadius: 20, marginBottom: 14, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10 }}>
@@ -104,9 +105,9 @@ function BuyerOrderCard({ order }: { order: any }) {
             <Text style={{ color: '#999', fontSize: 11, marginBottom: 2 }}>Сумма заказа</Text>
             <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 20 }}>{Number(order.price).toLocaleString()} ₸</Text>
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
             {order.selectedSize && (
-              <View style={{ backgroundColor: '#FFF0EB', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginBottom: 4 }}>
+              <View style={{ backgroundColor: '#FFF0EB', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
                 <Text style={{ color: '#FF4500', fontSize: 12, fontWeight: '600' }}>📏 {order.selectedSize}</Text>
               </View>
             )}
@@ -127,7 +128,6 @@ function BuyerOrderCard({ order }: { order: any }) {
 
         <StatusProgress status={status} deliveryInfo={{ deliveryDate: order.deliveryDate, deliveryNote: order.deliveryNote }} />
 
-        {/* Курьер */}
         {status === 'sent' && order.courierPhone && (
           <View style={{ backgroundColor: '#F3E5F5', borderRadius: 12, padding: 12, marginTop: 4, gap: 6 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -138,7 +138,7 @@ function BuyerOrderCard({ order }: { order: any }) {
               </View>
             </View>
             {order.deliveryDate && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="calendar" size={18} color="#9C27B0" />
                 <View>
                   <Text style={{ color: '#9C27B0', fontWeight: '700', fontSize: 13 }}>Ожидаемая доставка</Text>
@@ -147,7 +147,7 @@ function BuyerOrderCard({ order }: { order: any }) {
               </View>
             )}
             {order.deliveryNote && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="information-circle" size={18} color="#9C27B0" />
                 <Text style={{ color: '#7B1FA2', fontSize: 13, flex: 1 }}>{order.deliveryNote}</Text>
               </View>
@@ -155,60 +155,108 @@ function BuyerOrderCard({ order }: { order: any }) {
           </View>
         )}
 
-{status === 'delivered' && (
-  <View style={{ marginTop: 8 }}>
-    <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#FFD700' }}>
-      <Text style={{ fontSize: 28, marginBottom: 4 }}>📦</Text>
-      <Text style={{ color: '#333', fontWeight: '800', fontSize: 15 }}>Курьер доставил товар!</Text>
-      <Text style={{ color: '#666', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Вы получили заказ? Подтвердите получение</Text>
-    </View>
-    <TouchableOpacity
-      style={{ backgroundColor: '#4CAF50', borderRadius: 14, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
-      onPress={async () => {
-        Alert.alert(
-          '📦 Подтвердить получение?',
-          'Вы точно получили товар в хорошем состоянии?\n\n⚠️ После подтверждения заказ будет закрыт.',
-          [
-            {
-              text: '❌ Нет, есть проблема',
-              style: 'destructive',
-              onPress: () => Alert.alert(
-                '⚠️ Проблема с заказом',
-                'Пожалуйста, свяжитесь с продавцом через чат и опишите проблему.',
-                [{ text: 'Написать продавцу', onPress: () => {} }, { text: 'OK' }]
-              )
-            },
-            {
-              text: '✅ Да, получил!',
-              onPress: async () => {
-                await updateDoc(doc(db, 'orders', order.id), {
-                  status: 'buyer_confirmed',
-                  buyerConfirmedAt: new Date().toISOString(),
-                });
-                Alert.alert('🎉 Отлично!', 'Заказ успешно завершён!\nСпасибо что пользуетесь O-GO!');
-              }
-            }
-          ]
-        );
-      }}
-    >
-      <Ionicons name="checkmark-circle" size={22} color="#fff" />
-      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>✅ Получил товар!</Text>
-    </TouchableOpacity>
-  </View>
-)}
+        {status === 'delivered' && (
+          <View style={{ marginTop: 8 }}>
+            <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, borderColor: '#FFD700' }}>
+              <Text style={{ fontSize: 28, marginBottom: 4 }}>📦</Text>
+              <Text style={{ color: '#333', fontWeight: '800', fontSize: 15 }}>Курьер доставил товар!</Text>
+              <Text style={{ color: '#666', fontSize: 13, marginTop: 4, textAlign: 'center' }}>Вы получили заказ? Подтвердите получение</Text>
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: '#4CAF50', borderRadius: 14, padding: 16, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+              onPress={() => {
+                Alert.alert(
+                  '📦 Подтвердить получение?',
+                  'Вы точно получили товар в хорошем состоянии?\n\n⚠️ После подтверждения заказ будет закрыт.',
+                  [
+                    {
+                      text: '❌ Нет, есть проблема',
+                      style: 'destructive',
+                      onPress: () => setShowProblemChat(true),
+                    },
+                    {
+                      text: '✅ Да, получил!',
+                      onPress: async () => {
+                        await updateDoc(doc(db, 'orders', order.id), {
+                          status: 'buyer_confirmed',
+                          buyerConfirmedAt: new Date().toISOString(),
+                        });
+                        Alert.alert('🎉 Отлично!', 'Заказ успешно завершён!\nСпасибо что пользуетесь O-GO!');
+                      }
+                    }
+                  ]
+                );
+              }}
+            >
+              <Ionicons name="checkmark-circle" size={22} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>✅ Получил товар!</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-{status === 'buyer_confirmed' && (
-  <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, marginTop: 8, alignItems: 'center' }}>
-    <Text style={{ fontSize: 28, marginBottom: 4 }}>🎉</Text>
-    <Text style={{ color: '#2E7D32', fontWeight: '800', fontSize: 15 }}>Заказ завершён!</Text>
-    <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2 }}>Спасибо за заказ в O-GO</Text>
-  </View>
-)}
+        {status === 'buyer_confirmed' && (
+          <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, marginTop: 8, alignItems: 'center' }}>
+            <Text style={{ fontSize: 28, marginBottom: 4 }}>🎉</Text>
+            <Text style={{ color: '#2E7D32', fontWeight: '800', fontSize: 15 }}>Заказ завершён!</Text>
+            <Text style={{ color: '#4CAF50', fontSize: 13, marginTop: 2 }}>Спасибо за заказ в O-GO</Text>
+          </View>
+        )}
+
         {status === 'awaiting_payment_confirmation' && (
           <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 12, marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="time" size={18} color="#FF9800" />
             <Text style={{ color: '#E65100', fontWeight: '700', fontSize: 13, flex: 1 }}>Ожидаем подтверждения оплаты от продавца</Text>
+          </View>
+        )}
+
+        {showProblemChat && (
+          <View style={{ backgroundColor: '#FFF0EB', borderRadius: 14, padding: 14, marginTop: 8 }}>
+            <Text style={{ fontWeight: '800', color: '#1a1a1a', marginBottom: 10 }}>💬 Быстрое сообщение продавцу:</Text>
+            {[
+              '❌ Я не получил товар',
+              '📦 Товар пришёл повреждённым',
+              '🔄 Хочу вернуть товар',
+              '📞 Курьер не звонил и не приехал',
+              '❓ Другая проблема',
+            ].map(msg => (
+              <TouchableOpacity
+                key={msg}
+                onPress={async () => {
+                  try {
+                    const chatId = [order.buyerId, order.sellerId].sort().join('_') + '_' + order.dealId;
+                    await addDoc(collection(db, 'chats', chatId, 'messages'), {
+                      text: `⚠️ Проблема с заказом #${order.id?.slice(-6).toUpperCase()}: ${msg}`,
+                      senderId: order.buyerId,
+                      senderEmail: order.buyerEmail,
+                      createdAt: new Date().toISOString(),
+                      read: false,
+                    });
+                    await setDoc(doc(db, 'chats', chatId), {
+                      participants: [order.buyerId, order.sellerId],
+                      lastMessage: msg,
+                      lastMessageAt: new Date().toISOString(),
+                      lastSenderId: order.buyerId,
+                      dealTitle: order.dealTitle,
+                      buyerId: order.buyerId,
+                      sellerId: order.sellerId,
+                      buyerEmail: order.buyerEmail,
+                      sellerName: order.storeName,
+                      unreadCount: 1,
+                    }, { merge: true });
+                    setShowProblemChat(false);
+                    Alert.alert('✅ Сообщение отправлено!', 'Продавец получит уведомление');
+                  } catch (e: any) {
+                    Alert.alert('Ошибка', e.message);
+                  }
+                }}
+                style={{ backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#FF4500' }}
+              >
+                <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 14 }}>{msg}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity onPress={() => setShowProblemChat(false)} style={{ alignItems: 'center', padding: 8 }}>
+              <Text style={{ color: '#999' }}>Отмена</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -225,7 +273,7 @@ function SellerOrderCard({ order }: { order: any }) {
   const status = order.status as string;
   const info = STATUS_INFO[status] || STATUS_INFO['pending'];
   const currentIndex = STATUS_STEPS.indexOf(status);
-  const nextStatus = STATUS_STEPS[currentIndex + 1];
+  const nextStatus = STATUS_STEPS[currentIndex + 1] === 'buyer_confirmed' ? null : STATUS_STEPS[currentIndex + 1];
   const [courierPhone, setCourierPhone] = useState(order.courierPhone || '');
   const [deliveryDate, setDeliveryDate] = useState(order.deliveryDate || '');
   const [deliveryNote, setDeliveryNote] = useState(order.deliveryNote || '');
@@ -242,7 +290,6 @@ function SellerOrderCard({ order }: { order: any }) {
         status: nextStatus,
         ...(nextStatus === 'sent' ? { courierPhone, deliveryDate, deliveryNote } : {}),
         updatedAt: new Date().toISOString(),
-        [`statusHistory.${nextStatus}`]: new Date().toISOString(),
       });
     } catch (e: any) { Alert.alert('Ошибка', e.message); }
     setLoading(false);
@@ -258,9 +305,9 @@ function SellerOrderCard({ order }: { order: any }) {
             <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 16 }} numberOfLines={1}>{order.dealTitle}</Text>
             <Text style={{ color: '#999', fontSize: 13, marginTop: 3 }}>👤 {order.buyerEmail?.split('@')[0]}</Text>
           </View>
-          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          <View style={{ alignItems: 'flex-end', gap: 4 }}>
             <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 18 }}>{Number(order.price).toLocaleString()} ₸</Text>
-            <View style={{ backgroundColor: info.color + '18', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 1, borderColor: info.color + '30' }}>
+            <View style={{ backgroundColor: info.color + '18', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
               <Text style={{ color: info.color, fontWeight: '700', fontSize: 11 }}>{info.emoji} {info.label}</Text>
             </View>
           </View>
@@ -276,14 +323,9 @@ function SellerOrderCard({ order }: { order: any }) {
               {order.paymentMethod === 'cash' ? '💵 Наличными' : '📱 Kaspi'}
             </Text>
           </View>
-          {order.selectedSize && (
-            <View style={{ backgroundColor: '#FFF0EB', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
-              <Text style={{ color: '#FF4500', fontSize: 12, fontWeight: '600' }}>📏 {order.selectedSize}</Text>
-            </View>
-          )}
         </View>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
           <Text style={{ color: '#ccc', fontSize: 11 }}>#{order.id?.slice(-6).toUpperCase()} · {order.createdAt ? new Date(order.createdAt).toLocaleDateString('ru-RU') : ''}</Text>
           <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#ccc" />
         </View>
@@ -294,16 +336,15 @@ function SellerOrderCard({ order }: { order: any }) {
           <View style={{ height: 1, backgroundColor: '#f0f0f0', marginBottom: 14 }} />
 
           <View style={{ backgroundColor: '#f8f8f8', borderRadius: 14, padding: 12, marginBottom: 14 }}>
-            <Text style={{ fontWeight: '700', color: '#1a1a1a', marginBottom: 8, fontSize: 13 }}>📋 Детали заказа</Text>
+            <Text style={{ fontWeight: '700', color: '#1a1a1a', marginBottom: 8, fontSize: 13 }}>📋 Детали</Text>
             <Text style={{ color: '#555', fontSize: 13 }}>👤 {order.buyerEmail}</Text>
             <Text style={{ color: '#555', fontSize: 13 }}>📍 {order.address}</Text>
             <Text style={{ color: '#555', fontSize: 13 }}>📱 {order.phone}</Text>
           </View>
 
           {order.comment && (
-            <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 12, marginBottom: 14, flexDirection: 'row', gap: 8 }}>
-              <Ionicons name="chatbubble-outline" size={16} color="#FF9800" />
-              <Text style={{ color: '#555', fontSize: 13, flex: 1 }}>{order.comment}</Text>
+            <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 12, marginBottom: 14 }}>
+              <Text style={{ color: '#555', fontSize: 13 }}>💬 {order.comment}</Text>
             </View>
           )}
 
@@ -311,7 +352,7 @@ function SellerOrderCard({ order }: { order: any }) {
 
           {order.paymentMethod === 'kaspi' && order.receiptImage && (
             <View style={{ marginBottom: 14 }}>
-              <Text style={{ fontWeight: '700', color: '#FF9800', fontSize: 13, marginBottom: 8 }}>📸 Чек об оплате Kaspi</Text>
+              <Text style={{ fontWeight: '700', color: '#FF9800', marginBottom: 8 }}>📸 Чек об оплате</Text>
               <Image source={{ uri: order.receiptImage }} style={{ width: '100%', height: 200, borderRadius: 12 }} resizeMode="contain" />
               {order.paymentStatus === 'awaiting_confirmation' && (
                 <TouchableOpacity
@@ -321,78 +362,56 @@ function SellerOrderCard({ order }: { order: any }) {
                       status: 'pending',
                       updatedAt: new Date().toISOString(),
                     });
-                    Alert.alert('✅ Оплата подтверждена!', 'Заказ переведён в работу');
+                    Alert.alert('✅ Оплата подтверждена!');
                   }}
-                  style={{ backgroundColor: '#4CAF50', borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 10, flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                  style={{ backgroundColor: '#4CAF50', borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 10 }}
                 >
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Подтвердить получение оплаты</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>✅ Подтвердить получение оплаты</Text>
                 </TouchableOpacity>
-              )}
-              {order.paymentStatus === 'confirmed' && (
-                <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 12, marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                  <Text style={{ color: '#2E7D32', fontWeight: '700' }}>Оплата подтверждена</Text>
-                </View>
               )}
             </View>
           )}
 
-          {/* Поля для передачи курьеру */}
           {nextStatus === 'sent' && (
             <View style={{ marginBottom: 14 }}>
               <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 14, marginBottom: 12 }}>🚚 Информация о доставке</Text>
-
-              {/* Телефон курьера */}
               <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📱 Телефон курьера *</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 12 }}>
                 <Ionicons name="call-outline" size={18} color="#aaa" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#1a1a1a' }}
-                  placeholder="+7 777 123 45 67"
-                  value={courierPhone}
-                  onChangeText={setCourierPhone}
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#ccc"
-                />
+                <TextInput style={{ flex: 1, paddingVertical: 12, fontSize: 15 }} placeholder="+7 777 123 45 67" value={courierPhone} onChangeText={setCourierPhone} keyboardType="phone-pad" placeholderTextColor="#ccc" />
               </View>
-
-              {/* Дата/время доставки */}
               <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📅 Когда приедет курьер *</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 12 }}>
                 <Ionicons name="calendar-outline" size={18} color="#aaa" style={{ marginRight: 8 }} />
-                <TextInput
-                  style={{ flex: 1, paddingVertical: 12, fontSize: 15, color: '#1a1a1a' }}
-                  placeholder="Например: Завтра 15 сентября, 14:00-16:00"
-                  value={deliveryDate}
-                  onChangeText={setDeliveryDate}
-                  placeholderTextColor="#ccc"
-                />
+                <TextInput style={{ flex: 1, paddingVertical: 12, fontSize: 15 }} placeholder="Завтра 15 сентября, 14:00-16:00" value={deliveryDate} onChangeText={setDeliveryDate} placeholderTextColor="#ccc" />
               </View>
-
-              {/* Заметка покупателю */}
-              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>💬 Сообщение покупателю (необязательно)</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, paddingTop: 4, borderWidth: 1.5, borderColor: '#eee', marginBottom: 8 }}>
+              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>💬 Сообщение покупателю</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 8 }}>
                 <Ionicons name="chatbubble-outline" size={18} color="#aaa" style={{ marginRight: 8, marginTop: 10 }} />
-                <TextInput
-                  style={{ flex: 1, paddingVertical: 10, fontSize: 14, color: '#1a1a1a', minHeight: 60 }}
-                  placeholder="Например: Курьер позвонит за 30 минут до прибытия"
-                  value={deliveryNote}
-                  onChangeText={setDeliveryNote}
-                  multiline
-                  placeholderTextColor="#ccc"
-                />
+                <TextInput style={{ flex: 1, paddingVertical: 10, fontSize: 14, minHeight: 60 }} placeholder="Курьер позвонит за 30 минут..." value={deliveryNote} onChangeText={setDeliveryNote} multiline placeholderTextColor="#ccc" />
               </View>
-
               <View style={{ backgroundColor: '#E8F5E9', borderRadius: 10, padding: 10 }}>
-                <Text style={{ color: '#22C55E', fontSize: 12 }}>
-                  💡 Покупатель увидит дату и время прямо в своих заказах
-                </Text>
+                <Text style={{ color: '#22C55E', fontSize: 12 }}>💡 Покупатель увидит эту информацию в заказах</Text>
               </View>
             </View>
           )}
 
-          {nextStatus ? (
+          {status === 'delivered' && (
+            <View style={{ backgroundColor: '#FFF9E6', borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#FFD700' }}>
+              <Ionicons name="time" size={20} color="#FF9800" />
+              <Text style={{ color: '#E65100', fontWeight: '700', fontSize: 14, marginTop: 4 }}>Ожидаем подтверждения покупателя</Text>
+              <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Покупатель должен подтвердить получение</Text>
+            </View>
+          )}
+
+          {status === 'buyer_confirmed' && (
+            <View style={{ backgroundColor: '#E8F5E9', borderRadius: 14, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+              <Text style={{ color: '#2E7D32', fontWeight: '700', fontSize: 15 }}>🎉 Заказ завершён обеими сторонами!</Text>
+            </View>
+          )}
+
+          {nextStatus && (
             loading ? <ActivityIndicator color="#FF4500" /> : (
               <TouchableOpacity
                 style={{ backgroundColor: '#FF4500', borderRadius: 14, padding: 15, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8, elevation: 3 }}
@@ -403,22 +422,6 @@ function SellerOrderCard({ order }: { order: any }) {
                 </Text>
               </TouchableOpacity>
             )
-          ) : (
-            <View>
-              {status === 'delivered' && (
-                <View style={{ backgroundColor: '#FFF9E6', borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#FFD700' }}>
-                  <Ionicons name="time" size={20} color="#FF9800" />
-                  <Text style={{ color: '#E65100', fontWeight: '700', fontSize: 14, marginTop: 4 }}>Ожидаем подтверждения покупателя</Text>
-                  <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Покупатель должен подтвердить получение</Text>
-                </View>
-              )}
-              {status === 'buyer_confirmed' && (
-                <View style={{ backgroundColor: '#E8F5E9', borderRadius: 14, padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-                  <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                  <Text style={{ color: '#2E7D32', fontWeight: '700', fontSize: 15 }}>🎉 Заказ завершён обеими сторонами!</Text>
-                </View>
-              )}
-            </View>
           )}
         </View>
       )}
@@ -439,14 +442,14 @@ export function BuyerOrdersScreen({ user }: { user: User }) {
   }, [user]);
 
   const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'buyer_confirmed');
-    const displayed = filter === 'active' ? activeOrders : orders;
+  const displayed = filter === 'active' ? activeOrders : orders;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 24, paddingHorizontal: 20 }}>
         <Text style={{ color: '#fff', fontSize: 24, fontWeight: '800' }}>📦 Мои заказы</Text>
         <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13, marginTop: 4 }}>
-          {activeOrders.length > 0 ? `${activeOrders.length} активных заказов` : 'Нет активных заказов'}
+          {activeOrders.length > 0 ? `${activeOrders.length} активных` : 'Нет активных заказов'}
         </Text>
       </View>
       <View style={{ flexDirection: 'row', gap: 10, padding: 16, backgroundColor: '#fff', elevation: 2 }}>
@@ -464,7 +467,6 @@ export function BuyerOrdersScreen({ user }: { user: User }) {
             <Text style={{ color: '#1a1a1a', fontWeight: '800', fontSize: 18, marginBottom: 6 }}>
               {filter === 'active' ? 'Нет активных заказов' : 'Заказов пока нет'}
             </Text>
-            <Text style={{ color: '#999', textAlign: 'center', fontSize: 14 }}>Найдите скидки и сделайте первый заказ!</Text>
           </View>
         ) : displayed.map(order => <BuyerOrderCard key={order.id} order={order} />)}
       </ScrollView>
@@ -485,7 +487,7 @@ export function SellerOrdersScreen({ user }: { user: User }) {
   }, [user]);
 
   const activeOrders = orders.filter(o => o.status !== 'delivered' && o.status !== 'buyer_confirmed');
-    const displayed = filter === 'active' ? activeOrders : orders;
+  const displayed = filter === 'active' ? activeOrders : orders;
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} contentContainerStyle={{ padding: 16 }}>
@@ -493,7 +495,7 @@ export function SellerOrdersScreen({ user }: { user: User }) {
         <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#222' }}>📦 Управление заказами</Text>
         {activeOrders.length > 0 && (
           <View style={{ backgroundColor: '#FF4500', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}>
-            <Text style={{ color: '#fff', fontWeight: 'bold' }}>{activeOrders.length} новых</Text>
+            <Text style={{ color: '#fff', fontWeight: 'bold' }}>{activeOrders.length} активных</Text>
           </View>
         )}
       </View>
@@ -508,7 +510,9 @@ export function SellerOrdersScreen({ user }: { user: User }) {
       {displayed.length === 0 ? (
         <View style={[styles.center, { marginTop: 40 }]}>
           <Text style={{ fontSize: 48, marginBottom: 12 }}>📭</Text>
-          <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 16 }}>{filter === 'active' ? 'Нет активных заказов' : 'Заказов пока нет'}</Text>
+          <Text style={{ color: '#aaa', textAlign: 'center', fontSize: 16 }}>
+            {filter === 'active' ? 'Нет активных заказов' : 'Заказов пока нет'}
+          </Text>
         </View>
       ) : displayed.map(order => <SellerOrderCard key={order.id} order={order} />)}
     </ScrollView>
