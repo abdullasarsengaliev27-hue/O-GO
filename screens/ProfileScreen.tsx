@@ -19,6 +19,11 @@ import { KaspiSettingsScreen } from './seller/KaspiSettingsScreen';
 import { BuyerChatsScreen } from './BuyerChatsScreen';
 import { PromotionScreen } from './seller/PromotionScreen';
 
+import * as ImagePicker from 'expo-image-picker';
+import { updateDoc } from 'firebase/firestore';
+
+import * as ImageManipulator from 'expo-image-manipulator';
+
 type ScreenType = 'profile' | 'add' | 'stats' | 'chats' | 'orders' | 'sellerOrders' | 'savings' | 'happyHours' | 'kaspiSettings' | 'buyerChats' | 'promotion';
 
 export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
@@ -110,12 +115,43 @@ return onSnapshot(q, snap => {
         <View style={{ backgroundColor: '#FF4500', paddingTop: 24, paddingBottom: 40, paddingHorizontal: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
             {/* Логотип */}
-            <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginRight: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 }}>
-              {sellerProfile?.storeLogo
-                ? <Image source={{ uri: sellerProfile.storeLogo }} style={{ width: 80, height: 80 }} resizeMode="cover" />
-                : <Ionicons name="storefront" size={38} color="#FF4500" />
-              }
-            </View>
+            <TouchableOpacity
+  onPress={async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return Alert.alert('Нет доступа к фото');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 1,
+    });
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      // Уменьшаем до 200x200
+      const resized = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 200, height: 200 } }],
+        { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      const response = await fetch(resized.uri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      const base64 = await new Promise<string>(resolve => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      await updateDoc(doc(db, 'users', user.uid), { storeLogo: base64 });
+      Alert.alert('✅ Фото обновлено!');
+    }
+  }}
+  style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginRight: 16, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 }}
+>
+  {sellerProfile?.storeLogo
+    ? <Image source={{ uri: sellerProfile.storeLogo }} style={{ width: 80, height: 80 }} resizeMode="cover" />
+    : <Ionicons name="storefront" size={38} color="#FF4500" />
+  }
+  <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.4)', padding: 4, alignItems: 'center' }}>
+    <Ionicons name="camera" size={14} color="#fff" />
+  </View>
+</TouchableOpacity>
             <View style={{ flex: 1 }}>
               <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 4 }}>
                 {sellerProfile?.storeName || user.email?.split('@')[0]}

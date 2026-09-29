@@ -27,9 +27,7 @@ export function ReviewModal({ deal, user, visible, onClose }: { deal: any, user:
     if (status !== 'granted') return Alert.alert('Нет доступа к фото');
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.6,
+      allowsEditing: true, aspect: [1, 1], quality: 0.3,
     });
     if (!result.canceled) {
       const uri = result.assets[0].uri;
