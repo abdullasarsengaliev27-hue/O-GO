@@ -1,21 +1,42 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { User } from 'firebase/auth';
 import { ChatScreen } from '../ChatScreen';
+
 
 export function SellerChats({ user }: { user: User }) {
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState<any>(null);
 
+  type Chat = {
+    id: string;
+    sellerId: string;
+    lastMessageAt?: Timestamp;
+  };
+  
   useEffect(() => {
-    const q = query(collection(db, 'chats'), where('sellerId', '==', user.uid));
-    return onSnapshot(q, snap => {
-      setChats(snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()));
+    const q = query(
+      collection(db, 'chats'),
+      where('sellerId', '==', user.uid)
+    );
+  
+    return onSnapshot(q, (snap) => {
+      const chatsData: Chat[] = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Chat[];
+  
+      chatsData.sort(
+        (a, b) =>
+          (b.lastMessageAt?.toMillis() ?? 0) -
+          (a.lastMessageAt?.toMillis() ?? 0)
+      );
+  
+      setChats(chatsData);
       setLoading(false);
     });
   }, [user]);

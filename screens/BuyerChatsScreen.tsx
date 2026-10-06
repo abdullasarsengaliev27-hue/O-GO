@@ -12,8 +12,8 @@ export function BuyerChatsScreen({ user }: { user: User }) {
   const [selectedChat, setSelectedChat] = useState<any>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'chats'), where('buyerId', '==', user.uid));
-    return onSnapshot(q, snap => {
+    const q = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+        return onSnapshot(q, snap => {
       setChats(snap.docs.map(d => ({ id: d.id, ...d.data() }))
       .sort((a: any, b: any) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()));
             setLoading(false);
