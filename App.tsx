@@ -104,12 +104,38 @@ export default function App() {
           headerTitleStyle: { fontWeight: 'bold', fontSize: 20 },
         })}
       >
-        <Tab.Screen name="Главная">{() => <HomeScreen user={user} userCity={userCity} />}</Tab.Screen>
-        <Tab.Screen name="Поиск">{() => <SearchScreen user={user} userCity={userCity} />}</Tab.Screen>
-        <Tab.Screen name="Карта">{() => <MapScreen user={user} userCity={userCity} />}</Tab.Screen>
-        <Tab.Screen name="Избранное">{() => <FavoritesScreen user={user} />}</Tab.Screen>
-        <Tab.Screen name="Профиль">{() => <ProfileScreen user={user} userRole={userRole} userCity={userCity} onCityChange={setUserCity} />}</Tab.Screen>
-        </Tab.Navigator>    
-        </NavigationContainer>
+     <Tab.Screen name="Главная">{() => <HomeScreen user={user} userCity={userCity} userRole={userRole} />}</Tab.Screen>
+
+<Tab.Screen
+  name="Поиск"
+>
+  {() => <SearchScreen user={user} userCity={userCity} />}
+</Tab.Screen>
+
+<Tab.Screen
+  name="Карта"
+>
+  {() => <MapScreen user={user} userCity={userCity} />}
+</Tab.Screen>
+
+{userRole !== 'seller' && (
+  <Tab.Screen name="Избранное">
+    {() => <FavoritesScreen user={user} />}
+  </Tab.Screen>
+)}
+
+<Tab.Screen name="Профиль">
+  {() => (
+    <ProfileScreen
+      user={user}
+      userRole={userRole}
+      userCity={userCity}
+      onCityChange={setUserCity}
+    />
+  )}
+</Tab.Screen>
+
+</Tab.Navigator>
+</NavigationContainer>
   );
 }

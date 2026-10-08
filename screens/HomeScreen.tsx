@@ -207,8 +207,12 @@ function HappyHoursBanner() {
   );
 }
 
-export function HomeScreen({ user, userCity }: { user: User | null, userCity?: string | null }) {
-  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
+export function HomeScreen({ user, userCity, userRole }: { 
+  user: User | null, 
+  userCity?: string | null,
+  userRole?: string 
+}) {
+    const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   const [activeCity, setActiveCity] = useState('Все');
   const [sortBy, setSortBy] = useState<'new' | 'discount' | 'price'>('new');
   const [minDiscount, setMinDiscount] = useState(0);
@@ -325,7 +329,7 @@ export function HomeScreen({ user, userCity }: { user: User | null, userCity?: s
           </View>
 
           {deals.filter(d => !d.isHidden).slice(0, 3).map(deal => (
-            <DealCard key={deal.id} item={deal} user={user} onStorePress={setSelectedSellerId} />
+            <DealCard key={deal.id} item={deal} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />
           ))}
         </ScrollView>
       </View>

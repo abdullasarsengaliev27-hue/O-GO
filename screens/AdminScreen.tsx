@@ -121,10 +121,12 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
 
   
   useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'promotions'), where('status', '==', 'pending')),
-      snap => setPromotionRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+    const q = query(collection(db, 'promotions'), where('status', '==', 'pending'));
+    return onSnapshot(q, (snap: any) => {
+      const data = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      console.log('Promotions loaded:', data.length);
+      setPromotionRequests(data);
+    });
   }, []);
 
   const rejectApplication = (app: any) => {

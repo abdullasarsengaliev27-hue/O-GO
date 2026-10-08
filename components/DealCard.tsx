@@ -13,10 +13,11 @@ import { ChatScreen } from '../screens/ChatScreen';
 
 
 
-export function DealCard({ item, user, onStorePress }: {
+export function DealCard({ item, user, onStorePress, userRole }: {
   item: any,
   user: User | null,
-  onStorePress?: (sellerId: string) => void
+  onStorePress?: (sellerId: string) => void,
+  userRole?: string
 }) {
   const [isFav, setIsFav] = useState(false);
   const [avgRating, setAvgRating] = useState(0);
@@ -117,19 +118,21 @@ export function DealCard({ item, user, onStorePress }: {
             <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>-{item.discount}%</Text>
           </View>
 
-          {/* Кнопка избранного */}
-          <TouchableOpacity
-            onPress={toggleFav}
-            style={{
-              position: 'absolute', top: 12, right: 12,
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: 'rgba(255,255,255,0.95)',
-              justifyContent: 'center', alignItems: 'center',
-              shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
-            }}
-          >
-            <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={isFav ? '#FF4500' : '#999'} />
-          </TouchableOpacity>
+        {/* Кнопка избранного — только для покупателей */}
+        {user && userRole !== 'seller' && (
+            <TouchableOpacity
+    onPress={toggleFav}
+    style={{
+      position: 'absolute', top: 12, right: 12,
+      width: 38, height: 38, borderRadius: 19,
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      justifyContent: 'center', alignItems: 'center',
+      shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
+    }}
+  >
+    <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={isFav ? '#FF4500' : '#999'} />
+  </TouchableOpacity>
+)}
 
           {/* Цены поверх фото */}
           <View style={{ position: 'absolute', bottom: 10, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
