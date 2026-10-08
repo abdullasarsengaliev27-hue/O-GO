@@ -90,10 +90,22 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
       await updateDoc(doc(db, 'promotions', p.id), {
         status: 'approved', expiresAt, approvedAt: new Date().toISOString(),
       });
-      if (p.type === 'turbo' && p.dealId) {
-        await updateDoc(doc(db, 'deals', p.dealId), {
-          isBoosted: true, boostedUntil: expiresAt,
-        });
+      if (p.type === 'turbo') {
+        if (p.dealId) {
+          // Поднимаем конкретную скидку
+          await updateDoc(doc(db, 'deals', p.dealId), {
+            isBoosted: true, boostedUntil: expiresAt,
+          });
+        } else {
+          // Поднимаем все скидки продавца
+          const { getDocs, collection, query, where } = await import('firebase/firestore');
+          const dealsSnap = await getDocs(query(collection(db, 'deals'), where('sellerId', '==', p.sellerId)));
+          for (const d of dealsSnap.docs) {
+            await updateDoc(doc(db, 'deals', d.id), {
+              isBoosted: true, boostedUntil: expiresAt,
+            });
+          }
+        }
       }
       Alert.alert('✅ Продвижение активировано!', `${p.promoTitle} на ${p.planLabel}`);
     } catch (e: any) { Alert.alert('Ошибка', e.message); }
