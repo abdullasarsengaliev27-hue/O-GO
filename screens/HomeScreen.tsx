@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, FlatList, TextInput, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, orderBy, onSnapshot, getDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, getDoc, doc, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { DealCard } from '../components/DealCard';
@@ -29,7 +29,6 @@ function HappyHoursBanner() {
       const now = new Date();
       const currentDay = (now.getDay() + 6) % 7;
       const currentHour = `${String(now.getHours()).padStart(2, '0')}:00`;
-
       const all = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter((hh: any) => hh.isActive && hh.days?.includes(currentDay))
@@ -49,10 +48,7 @@ function HappyHoursBanner() {
           if (!a.isNow && b.isNow) return 1;
           return a.minutesLeft - b.minutesLeft;
         });
-
       setActiveHH(all);
-
-      // Загружаем профили продавцов
       const profiles: Record<string, any> = {};
       for (const hh of all) {
         if (hh.sellerId && !profiles[hh.sellerId]) {
@@ -65,7 +61,6 @@ function HappyHoursBanner() {
   }, []);
 
   if (activeHH.length === 0) return null;
-
   const seller = selectedHH ? sellerProfiles[selectedHH.sellerId] : null;
 
   return (
@@ -76,12 +71,7 @@ function HappyHoursBanner() {
       {activeHH.map(hh => {
         const s = sellerProfiles[hh.sellerId];
         return (
-          <TouchableOpacity
-            key={hh.id}
-            onPress={() => setSelectedHH(hh)}
-            style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 10, elevation: 3 }}
-            activeOpacity={0.9}
-          >
+          <TouchableOpacity key={hh.id} onPress={() => setSelectedHH(hh)} style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 10, elevation: 3 }} activeOpacity={0.9}>
             {hh.imageUrl
               ? <Image source={{ uri: hh.imageUrl }} style={{ width: '100%', height: 160 }} resizeMode="cover" />
               : <View style={{ backgroundColor: '#FF9800', height: 160, justifyContent: 'center', alignItems: 'center' }}>
@@ -93,7 +83,6 @@ function HappyHoursBanner() {
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>{hh.title}</Text>
                   {s?.storeName && <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>🏪 {s.storeName}</Text>}
-                  {s?.storeAddress && <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 12 }}>📍 {s.storeAddress}</Text>}
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <View style={{ backgroundColor: '#FF4500', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginBottom: 4 }}>
@@ -116,7 +105,6 @@ function HappyHoursBanner() {
           </TouchableOpacity>
         );
       })}
-
       {selectedHH && (
         <Modal visible={true} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSelectedHH(null)}>
           <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
@@ -184,11 +172,6 @@ function HappyHoursBanner() {
                       </View>
                     </View>
                   )}
-                  {seller.storeDescription && (
-                    <View style={{ paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
-                      <Text style={{ color: '#666', fontSize: 14, lineHeight: 20 }}>{seller.storeDescription}</Text>
-                    </View>
-                  )}
                 </View>
               )}
               <TouchableOpacity
@@ -207,12 +190,12 @@ function HappyHoursBanner() {
   );
 }
 
-export function HomeScreen({ user, userCity, userRole }: { 
-  user: User | null, 
+export function HomeScreen({ user, userCity, userRole }: {
+  user: User | null,
   userCity?: string | null,
-  userRole?: string 
+  userRole?: string
 }) {
-    const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
+  const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
   const [activeCity, setActiveCity] = useState('Все');
   const [sortBy, setSortBy] = useState<'new' | 'discount' | 'price'>('new');
   const [minDiscount, setMinDiscount] = useState(0);
@@ -221,6 +204,7 @@ export function HomeScreen({ user, userCity, userRole }: {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Все');
   const [showDeals, setShowDeals] = useState(false);
+  const [activeBanners, setActiveBanners] = useState<any[]>([]);
   const isFirstLoad = useRef(true);
 
   useEffect(() => {
@@ -238,6 +222,21 @@ export function HomeScreen({ user, userCity, userRole }: {
       }
       isFirstLoad.current = false;
       setDeals(newDeals);
+    });
+  }, []);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'promotions'),
+      where('type', '==', 'banner'),
+      where('status', '==', 'approved')
+    );
+    return onSnapshot(q, snap => {
+      const now = new Date();
+      const active = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter((p: any) => p.expiresAt && new Date(p.expiresAt) > now);
+      setActiveBanners(active);
     });
   }, []);
 
@@ -276,6 +275,7 @@ export function HomeScreen({ user, userCity, userRole }: {
           </TouchableOpacity>
         </View>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+          {/* Категории */}
           <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 16 }}>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
               {[
@@ -302,6 +302,42 @@ export function HomeScreen({ user, userCity, userRole }: {
             </View>
           </View>
 
+          {/* Платные баннеры продавцов */}
+          {activeBanners.map((banner: any) => (
+            <View key={banner.id} style={{ borderRadius: 20, marginBottom: 12, overflow: 'hidden', elevation: 4 }}>
+              {banner.bannerImage
+                ? <Image source={{ uri: banner.bannerImage }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
+                : <View style={{ backgroundColor: '#FF4500', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 28 }}>🔥</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginBottom: 4 }}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>⚡ РАСПРОДАЖА ДНЯ</Text>
+                      </View>
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{banner.sellerEmail?.split('@')[0] || 'Магазин'}</Text>
+                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Специальные скидки только сегодня!</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={{ backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}
+                      onPress={() => { setActiveCategory('Все'); setShowDeals(true); }}
+                    >
+                      <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>Смотреть</Text>
+                    </TouchableOpacity>
+                  </View>
+              }
+              {banner.bannerImage && (
+                <TouchableOpacity
+                  style={{ position: 'absolute', bottom: 10, right: 10, backgroundColor: '#FF4500', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}
+                  onPress={() => { setActiveCategory('Все'); setShowDeals(true); }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Смотреть →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+
+          {/* Обычный баннер-слайдер */}
           <View style={[styles.banner, { backgroundColor: BANNERS[bannerIndex].color, marginHorizontal: 0 }]}>
             <View style={{ flex: 1 }}>
               <Text style={styles.bannerTitle}>{BANNERS[bannerIndex].title}</Text>
@@ -350,7 +386,7 @@ export function HomeScreen({ user, userCity, userRole }: {
       <FlatList
         data={filtered}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => <DealCard item={item} user={user} onStorePress={setSelectedSellerId} />}
+        renderItem={({ item }) => <DealCard item={item} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />}
         contentContainerStyle={{ padding: 12, paddingTop: 0 }}
         ListHeaderComponent={
           <View>
@@ -365,7 +401,7 @@ export function HomeScreen({ user, userCity, userRole }: {
               <Ionicons name="location" size={18} color="#FF4500" style={{ marginRight: 6 }} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {CITIES.map(city => (
-                  <TouchableOpacity key={city} style={[{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, marginRight: 6, backgroundColor: activeCity === city ? '#FF4500' : '#f0f0f0' }]} onPress={() => setActiveCity(city)}>
+                  <TouchableOpacity key={city} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, marginRight: 6, backgroundColor: activeCity === city ? '#FF4500' : '#f0f0f0' }} onPress={() => setActiveCity(city)}>
                     <Text style={{ color: activeCity === city ? '#fff' : '#666', fontSize: 13, fontWeight: '600' }}>{city}</Text>
                   </TouchableOpacity>
                 ))}
