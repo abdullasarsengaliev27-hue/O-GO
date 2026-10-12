@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -14,7 +14,7 @@ interface Message {
   read: boolean;
 }
 
-export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle, buyerId, sellerId, onBack }: {
+export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle, buyerId, sellerId, isSeller, onBack }: {
   user: User;
   chatId: string;
   otherUserId: string;
@@ -22,6 +22,7 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
   dealTitle?: string;
   buyerId?: string;
   sellerId?: string;
+  isSeller?: boolean;
   onBack: () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -29,6 +30,7 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
   const [loading, setLoading] = useState(true);
   const [otherProfile, setOtherProfile] = useState<any>(null);
   const flatListRef = useRef<FlatList>(null);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
 
   useEffect(() => {
     getDoc(doc(db, 'users', otherUserId)).then(snap => {
@@ -191,24 +193,61 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
         />
       )}
 
-      {/* Поле ввода */}
-      <View style={{ backgroundColor: '#fff', padding: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
-        <TextInput
-          style={{ flex: 1, backgroundColor: '#f8f8f8', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 120, borderWidth: 1.5, borderColor: '#f0f0f0' }}
-          placeholder="Написать сообщение..."
-          value={text}
-          onChangeText={setText}
-          multiline
-          placeholderTextColor="#aaa"
-        />
+     {/* Быстрые ответы для продавца */}
+{isSeller && showQuickReplies && (
+  <View style={{ backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingHorizontal: 12, paddingVertical: 8 }}>
+    <Text style={{ color: '#999', fontSize: 12, marginBottom: 8, fontWeight: '600' }}>⚡ Быстрые ответы:</Text>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      {[
+        '✅ Да, скидка действует',
+        '❌ Товар закончился',
+        '📍 Наш адрес: ' + (otherProfile?.storeAddress || 'уточните пожалуйста'),
+        '⏰ Время работы: 9:00-21:00',
+        '🚚 Доставка есть, уточните детали',
+        '💰 Цена актуальна',
+        '📞 Перезвоните нам',
+        '🙏 Спасибо за обращение!',
+        '⏳ Уточню информацию и отвечу',
+        '✅ Ваш заказ принят!',
+      ].map(reply => (
         <TouchableOpacity
-          onPress={sendMessage}
-          disabled={!text.trim()}
-          style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: text.trim() ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
+          key={reply}
+          onPress={() => { setText(reply); setShowQuickReplies(false); }}
+          style={{ backgroundColor: '#FFF0EB', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: '#FF4500' + '30' }}
         >
-          <Ionicons name="send" size={20} color={text.trim() ? '#fff' : '#aaa'} />
+          <Text style={{ color: '#FF4500', fontSize: 13, fontWeight: '600' }}>{reply}</Text>
         </TouchableOpacity>
-      </View>
+      ))}
+    </ScrollView>
+  </View>
+)}
+
+{/* Поле ввода */}
+<View style={{ backgroundColor: '#fff', padding: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
+  {isSeller && (
+    <TouchableOpacity
+      onPress={() => setShowQuickReplies(!showQuickReplies)}
+      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: showQuickReplies ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
+    >
+      <Ionicons name="flash" size={18} color={showQuickReplies ? '#fff' : '#999'} />
+    </TouchableOpacity>
+  )}
+  <TextInput
+    style={{ flex: 1, backgroundColor: '#f8f8f8', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 120, borderWidth: 1.5, borderColor: '#f0f0f0' }}
+    placeholder="Написать сообщение..."
+    value={text}
+    onChangeText={setText}
+    multiline
+    placeholderTextColor="#aaa"
+  />
+  <TouchableOpacity
+    onPress={sendMessage}
+    disabled={!text.trim()}
+    style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: text.trim() ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
+  >
+    <Ionicons name="send" size={20} color={text.trim() ? '#fff' : '#aaa'} />
+  </TouchableOpacity>
+</View>
     </KeyboardAvoidingView>
   );
 }

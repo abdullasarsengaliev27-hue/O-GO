@@ -54,6 +54,12 @@ export default function App() {
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
+        // Сначала проверяем админа
+        const adminSnap = await getDoc(doc(db, 'admins', u.uid));
+        if (adminSnap.exists() && adminSnap.data().role === 'admin') {
+          setUserRole('admin');
+          return;
+        }
         const snap = await getDoc(doc(db, 'users', u.uid));
         if (snap.exists()) {
           const data = snap.data();

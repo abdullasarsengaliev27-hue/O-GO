@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, Image, TouchableOpacity, Alert, Modal } from 'react-native';
+import { View, Text, Image, TouchableOpacity, Alert, Modal, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { doc, getDoc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -323,6 +323,21 @@ export function DealCard({ item, user, onStorePress, userRole }: {
     <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 14 }}>Написать продавцу</Text>
   </TouchableOpacity>
 )}
+
+<TouchableOpacity
+  onPress={async () => {
+    try {
+      await Share.share({
+        message: `🔥 Скидка в O-GO!\n\n${item.title}\n💰 Цена: ${Number(item.newPrice).toLocaleString()} ₸ (-${item.discount}%)\n🏪 ${item.store}\n\nСкачай O-GO и найди лучшие скидки Казахстана!`,
+        title: item.title,
+      });
+    } catch (e) {}
+  }}
+  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 12, marginTop: 8 }}
+>
+  <Ionicons name="share-social-outline" size={18} color="#22C55E" />
+  <Text style={{ color: '#22C55E', fontWeight: '700', fontSize: 14 }}>Поделиться скидкой</Text>
+</TouchableOpacity>
 
 {activeChatId && user && (
   <Modal visible={!!activeChatId} animationType="slide" onRequestClose={() => setActiveChatId(null)}>

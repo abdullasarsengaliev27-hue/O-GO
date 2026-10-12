@@ -5,6 +5,7 @@ import { collection, addDoc, query, where, onSnapshot } from 'firebase/firestore
 import { db } from '../../firebase/config';
 import { User } from 'firebase/auth';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 const PROMOTIONS = [
   {
@@ -54,7 +55,8 @@ export function PromotionScreen({ user }: { user: User }) {  const [activePromot
   const [showModal, setShowModal] = useState(false);
   const [showDealPicker, setShowDealPicker] = useState(false);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
-  const [paying, setPaying] = useState(false);
+const [bannerImage, setBannerImage] = useState<string | null>(null);
+const [paying, setPaying] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, 'promotions'), where('sellerId', '==', user.uid));
@@ -97,6 +99,31 @@ export function PromotionScreen({ user }: { user: User }) {  const [activePromot
     }
   };
 
+  const pickBannerImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return Alert.alert('Нет доступа к фото');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [16, 9], quality: 0.7,
+    });
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      const resized = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 800, height: 450 } }],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      const response = await fetch(resized.uri);
+      const blob = await response.blob();
+      const reader = new FileReader();
+      const base64 = await new Promise<string>(resolve => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+      setBannerImage(base64);
+    }
+  };
+
   const isActive = (promoId: string) => activePromotions.some((p: any) => p.type === promoId);
   const getExpiry = (promoId: string) => {
     const promo = activePromotions.find((p: any) => p.type === promoId);
@@ -109,6 +136,7 @@ export function PromotionScreen({ user }: { user: User }) {  const [activePromot
     setSelectedPlan(promo.plans[0]);
     setSelectedDeal(null);
     setReceiptImage(null);
+    setBannerImage(null);
     setShowModal(true);
   };
 
@@ -132,6 +160,7 @@ export function PromotionScreen({ user }: { user: User }) {  const [activePromot
         planLabel: selectedPlan.label,
         dealId: selectedDeal?.id || null,
         dealTitle: selectedDeal?.title || null,
+        bannerImage: bannerImage || null,
         receiptImage,
         status: 'pending',
         requestedAt: new Date().toISOString(),
@@ -316,6 +345,30 @@ export function PromotionScreen({ user }: { user: User }) {  const [activePromot
                   3. Получатель: <Text style={{ fontWeight: '800' }}>O-GO Платформа</Text>
                 </Text>
               </View>
+
+{/* Фото для баннера — только для banner типа */}
+{selectedPromo?.id === 'banner' && (
+  <View style={{ marginBottom: 16 }}>
+    <Text style={{ fontWeight: '700', color: '#333', marginBottom: 10 }}>🖼 Фото для баннера (необязательно)</Text>
+    {bannerImage ? (
+      <View style={{ marginBottom: 8 }}>
+        <Image source={{ uri: bannerImage }} style={{ width: '100%', height: 140, borderRadius: 14 }} resizeMode="cover" />
+        <TouchableOpacity onPress={() => setBannerImage(null)} style={{ marginTop: 6, alignItems: 'center' }}>
+          <Text style={{ color: '#f44336', fontSize: 13 }}>✕ Удалить фото</Text>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <TouchableOpacity
+        onPress={pickBannerImage}
+        style={{ height: 100, borderRadius: 14, backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6366F1', borderStyle: 'dashed', marginBottom: 8 }}
+      >
+        <Ionicons name="image-outline" size={30} color="#6366F1" />
+        <Text style={{ color: '#6366F1', fontWeight: '600', marginTop: 6 }}>Загрузить фото баннера</Text>
+        <Text style={{ color: '#aaa', fontSize: 12 }}>Рекомендуется 16:9</Text>
+      </TouchableOpacity>
+    )}
+  </View>
+)}
 
               {/* Загрузка чека */}
               <Text style={{ fontWeight: '700', color: '#333', marginBottom: 10 }}>📸 Скриншот чека об оплате *</Text>

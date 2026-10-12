@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { CATEGORIES } from '../components/constants';
 import { styles } from '../components/styles';
+
 
 const CITY_COORDS: Record<string, { lat: number, lng: number }> = {
   'Алматы': { lat: 43.2220, lng: 76.8512 },
@@ -30,6 +31,7 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
   const [selectedCategory, setSelectedCategory] = useState('Все');
   const [selectedMapCity, setSelectedMapCity] = useState('Мой город');
   const [loading, setLoading] = useState(true);
+const [mapPromotions, setMapPromotions] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -49,6 +51,23 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
     return onSnapshot(collection(db, 'deals'), snap => {
       setDeals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+  }, []);
+
+  useEffect(() => {
+    const now = new Date().toISOString();
+    return onSnapshot(
+      query(collection(db, 'promotions'),
+        where('type', '==', 'map'),
+        where('status', '==', 'approved')
+      ),
+      snap => {
+        const active = snap.docs
+          .map(d => d.data())
+          .filter((p: any) => p.expiresAt && p.expiresAt > now)
+          .map((p: any) => p.sellerId);
+        setMapPromotions(active);
+      }
+    );
   }, []);
 
   const filtered = deals
@@ -88,6 +107,7 @@ deals
         lat: deal.lat || (c.lat + (Math.random() - 0.5) * 0.018),
         lng: deal.lng || (c.lng + (Math.random() - 0.5) * 0.018),
         deals: [],
+        isHighlighted: mapPromotions.includes(key),
       };
     }
     sellerGroups[key].deals.push({
@@ -99,7 +119,10 @@ deals
     });
   });
 
-const allMarkers = Object.values(sellerGroups);
+  const allMarkers = Object.values(sellerGroups).map((m: any) => ({
+    ...m,
+    isHighlighted: mapPromotions.includes(m.sellerId || Object.keys(sellerGroups).find(k => sellerGroups[k] === m) || ''),
+  }));
 
   const html = `<!DOCTYPE html>
 <html>
@@ -123,6 +146,11 @@ const allMarkers = Object.values(sellerGroups);
 .leaflet-control-zoom a:hover { background: #FFF0EB !important; }
 .leaflet-popup-content-wrapper { border-radius: 14px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; border: none !important; padding: 4px !important; }
 .leaflet-popup-tip { background: #fff !important; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255,215,0,0.7); }
+  70% { box-shadow: 0 0 0 15px rgba(255,215,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(255,215,0,0); }
+}
   </style>
 </head>
 <body>
@@ -146,8 +174,29 @@ document.querySelector('.leaflet-control-attribution').style.display = 'none';
   var markerObjects = [];
 
   allMarkers.forEach(function(m) {
-    var dealCount = m.deals.length;
-    var icon;
+  var dealCount = m.deals.length;
+  var icon;
+
+  if (m.isHighlighted) {
+    // Золотой выделенный маркер
+    icon = L.divIcon({
+      className: '',
+      html: '<div style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#fff;border:3px solid #fff;border-radius:50%;width:60px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,0.8),0 4px 15px rgba(0,0,0,0.3);animation:pulse 2s infinite"><span style="font-size:18px">⭐</span><span style="font-size:9px;font-weight:900">ТОП</span></div>',
+      iconAnchor: [30, 30]
+    });
+  } else if (dealCount === 1) {
+    icon = L.divIcon({
+      className: '',
+      html: '<div class="cm">-' + m.deals[0].discount + '%</div>',
+      iconAnchor: [20, 10]
+    });
+  } else {
+    icon = L.divIcon({
+      className: '',
+      html: '<div class="cm" style="border-radius:50%;width:36px;height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0"><span style="font-size:13px;font-weight:900">' + dealCount + '</span><span style="font-size:8px;opacity:0.9">скид</span></div>',
+      iconAnchor: [18, 18]
+    });
+  }
 
     if (dealCount === 1) {
       icon = L.divIcon({

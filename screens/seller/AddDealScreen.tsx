@@ -39,6 +39,7 @@ export function AddDealScreen({ user, sellerCategory }: { user: User, sellerCate
   const [city, setCity] = useState('');
   const [hasDelivery, setHasDelivery] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageAspect, setImageAspect] = useState<[number, number]>([4, 5]);
   const [loading, setLoading] = useState(false);
   
   const [dealLat, setDealLat] = useState<number | null>(null);
@@ -89,7 +90,12 @@ const [exactAddress, setExactAddress] = useState('');
   const pickMainImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return Alert.alert('Нет доступа к фото');
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.7 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: imageAspect,
+      quality: 0.7
+    });
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
 
@@ -216,10 +222,33 @@ if (imageUri) {
         </View>
       </View>
 
+{/* Выбор формата фото */}
+<View style={{ marginBottom: 12 }}>
+  <Text style={{ fontWeight: '700', color: '#333', marginBottom: 8, fontSize: 13 }}>📐 Формат фото:</Text>
+  <View style={{ flexDirection: 'row', gap: 10 }}>
+    <TouchableOpacity
+      onPress={() => setImageAspect([4, 5])}
+      style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: imageAspect[0] === 4 ? '#FF4500' : '#f5f5f5', alignItems: 'center', borderWidth: 2, borderColor: imageAspect[0] === 4 ? '#FF4500' : 'transparent' }}
+    >
+      <Text style={{ fontSize: 20 }}>📱</Text>
+      <Text style={{ color: imageAspect[0] === 4 ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>4:5</Text>
+      <Text style={{ color: imageAspect[0] === 4 ? 'rgba(255,255,255,0.8)' : '#999', fontSize: 11 }}>Вертикальный</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      onPress={() => setImageAspect([16, 9])}
+      style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: imageAspect[0] === 16 ? '#FF4500' : '#f5f5f5', alignItems: 'center', borderWidth: 2, borderColor: imageAspect[0] === 16 ? '#FF4500' : 'transparent' }}
+    >
+      <Text style={{ fontSize: 20 }}>🖥</Text>
+      <Text style={{ color: imageAspect[0] === 16 ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>16:9</Text>
+      <Text style={{ color: imageAspect[0] === 16 ? 'rgba(255,255,255,0.8)' : '#999', fontSize: 11 }}>Горизонтальный</Text>
+    </TouchableOpacity>
+  </View>
+</View>
+
       {/* Фото */}
       <TouchableOpacity onPress={pickMainImage} style={styles.imagePicker}>
         {imageUri
-          ? <Image source={{ uri: imageUri }} style={{ width: '100%', height: 180, borderRadius: 12 }} resizeMode="cover" />
+          ? <Image source={{ uri: imageUri }} style={{ width: '100%', height: imageAspect[0] === 16 ? 180 : 240, borderRadius: 12 }} resizeMode="cover" />
           : <View style={{ alignItems: 'center' }}><Ionicons name="camera" size={40} color="#FF4500" /><Text style={{ color: '#FF4500', fontWeight: '600', marginTop: 8 }}>Добавить фото</Text></View>
         }
       </TouchableOpacity>

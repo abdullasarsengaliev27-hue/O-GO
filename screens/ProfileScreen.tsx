@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User, sendEmailVerification } from 'firebase/auth';
-import { doc, setDoc, getDoc, collection, onSnapshot, query, where } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, onSnapshot, query, where, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
 import { AddDealScreen } from './seller/AddDealScreen';
 import { SellerStats } from './seller/SellerStats';
@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { updateDoc } from 'firebase/firestore';
 
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Share } from 'react-native';
 
 type ScreenType = 'profile' | 'add' | 'stats' | 'chats' | 'orders' | 'sellerOrders' | 'savings' | 'happyHours' | 'kaspiSettings' | 'buyerChats' | 'promotion';
 
@@ -49,6 +50,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   const [newNotifications, setNewNotifications] = useState(0);
   const [showAdminInput, setShowAdminInput] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [adminPassword2, setAdminPassword2] = useState('');
 
   useEffect(() => {
     if (!user || userRole !== 'seller') return;
@@ -94,6 +96,10 @@ return onSnapshot(q, snap => {
       <Text style={{ color: '#FF4500', fontSize: 16 }}>← Назад</Text>
     </TouchableOpacity>
   );
+
+  if (user && userRole === 'admin') {
+    return <AdminScreen onBack={() => signOut(auth)} />;
+  }
 
   // Залогинен
   if (user) {
@@ -249,9 +255,17 @@ return onSnapshot(q, snap => {
             </View>
           ) : sellerDeals.filter(d => !d.isHidden).slice(0, 3).map(deal => (
             <View key={deal.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' }}>
-              <View style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', marginRight: 12 }}>
-                <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>-{deal.discount}%</Text>
-              </View>
+              <View style={{ width: 64, height: 64, borderRadius: 14, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' }}>
+  {deal.imageUrl
+    ? <Image source={{ uri: deal.imageUrl }} style={{ width: 64, height: 64 }} resizeMode="cover" />
+    : <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>-{deal.discount}%</Text>
+  }
+  {deal.imageUrl && (
+    <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(255,69,0,0.8)', paddingVertical: 2, alignItems: 'center' }}>
+      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 10 }}>-{deal.discount}%</Text>
+    </View>
+  )}
+</View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 14 }} numberOfLines={1}>{deal.title}</Text>
                 <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>{Number(deal.newPrice).toLocaleString()} ₸ · {deal.city}</Text>
@@ -335,8 +349,23 @@ return onSnapshot(q, snap => {
       </ScrollView>
     );
 
-    // Профиль покупателя
-    return (
+   // Профиль покупателя
+const sendSupport = async (topic: string) => {
+  try {
+    await addDoc(collection(db, 'support'), {
+      userId: user.uid,
+      userEmail: user.email,
+      topic,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    });
+    Alert.alert('✅ Жалоба отправлена!', 'Администратор рассмотрит ваше обращение в течение 24 часов.');
+  } catch (e: any) {
+    Alert.alert('Ошибка', e.message);
+  }
+};
+
+return (
       <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
         {/* Шапка покупателя */}
         <View style={{ backgroundColor: '#FF4500', paddingTop: 24, paddingBottom: 40, paddingHorizontal: 20 }}>
@@ -412,6 +441,32 @@ return onSnapshot(q, snap => {
           </TouchableOpacity>
         </View>
     
+{/* Поддержка */}
+<TouchableOpacity
+  style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 }}
+  onPress={() => {
+    Alert.alert(
+      '🆘 Поддержка и жалобы',
+      'Выберите тему обращения:',
+      [
+        { text: '❌ Неработающая скидка', onPress: () => sendSupport('Неработающая скидка') },
+        { text: '💰 Неверная цена', onPress: () => sendSupport('Неверная цена') },
+        { text: '🏪 Закрытый магазин', onPress: () => sendSupport('Закрытый магазин') },
+        { text: '📋 Недостоверная информация', onPress: () => sendSupport('Недостоверная информация') },
+        { text: 'Отмена', style: 'cancel' },
+      ]
+    );
+  }}
+>
+  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center' }}>
+    <Ionicons name="warning-outline" size={22} color="#EF4444" />
+  </View>
+  <View style={{ flex: 1 }}>
+    <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Поддержка и жалобы</Text>
+    <Text style={{ color: '#999', fontSize: 12 }}>Пожаловаться на скидку или магазин</Text>
+  </View>
+  <Ionicons name="chevron-forward" size={18} color="#ccc" />
+</TouchableOpacity>
 
         {/* Настройки */}
         <View style={{ marginHorizontal: 16, gap: 10, marginBottom: 24 }}>
@@ -467,7 +522,7 @@ return onSnapshot(q, snap => {
   // Не залогинен — экраны
   if (mode === 'application') return <SellerApplicationScreen onBack={() => setMode('choose')} />;
   if (mode === 'admin') return <AdminScreen onBack={() => setMode('choose')} />;
-
+  
   if (mode === 'sellerMenu') return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <ScrollView contentContainerStyle={[styles.center, { padding: 24, flexGrow: 1 }]}>
@@ -493,26 +548,66 @@ return onSnapshot(q, snap => {
           <Text style={{ color: '#ddd', fontSize: 12 }}>O-GO v1.0</Text>
         </TouchableOpacity>
       </ScrollView>
+      </View>
+    );
 
       {showAdminInput && (
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10 }}>
-          <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 16, marginBottom: 12 }}>🛡 Вход для администратора</Text>
-          <TextInput style={styles.input} placeholder="Введи пароль администратора" value={adminPassword} onChangeText={setAdminPassword} secureTextEntry placeholderTextColor="#aaa" autoFocus />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <TouchableOpacity style={[styles.bigBtn, { flex: 1, backgroundColor: '#f0f0f0' }]} onPress={() => { setShowAdminInput(false); setAdminPassword(''); }}>
-              <Text style={[styles.bigBtnText, { color: '#666' }]}>Отмена</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.bigBtn, { flex: 1 }]} onPress={() => {
-              if (adminPassword === 'ogoadmin2024') { setShowAdminInput(false); setAdminPassword(''); setMode('admin'); }
-              else Alert.alert('❌ Неверный пароль');
-            }}>
-              <Text style={styles.bigBtnText}>Войти</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+  <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10 }}>
+    <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 16, marginBottom: 6 }}>🛡 Панель администратора</Text>
+    <Text style={{ color: '#999', fontSize: 13, marginBottom: 16 }}>Войдите через аккаунт администратора</Text>
+    <TextInput
+      style={styles.input}
+      placeholder="Email администратора"
+      value={adminPassword}
+      onChangeText={setAdminPassword}
+      keyboardType="email-address"
+      autoCapitalize="none"
+      placeholderTextColor="#aaa"
+    />
+    <TextInput
+      style={[styles.input, { marginTop: 10 }]}
+      placeholder="Пароль"
+      value={adminPassword2 || ''}
+      onChangeText={v => setAdminPassword2(v)}
+      secureTextEntry
+      placeholderTextColor="#aaa"
+      autoFocus
+    />
+    <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+      <TouchableOpacity
+        style={[styles.bigBtn, { flex: 1, backgroundColor: '#f0f0f0' }]}
+        onPress={() => { setShowAdminInput(false); setAdminPassword(''); setAdminPassword2(''); }}
+      >
+        <Text style={[styles.bigBtnText, { color: '#666' }]}>Отмена</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.bigBtn, { flex: 1 }]}
+        onPress={async () => {
+          if (!adminPassword || !adminPassword2) return Alert.alert('Ошибка', 'Заполни все поля');
+          setLoading(true);
+          try {
+            const res = await signInWithEmailAndPassword(auth, adminPassword, adminPassword2);
+            const snap = await getDoc(doc(db, 'admins', res.user.uid));
+            if (snap.exists() && snap.data().role === 'admin') {
+              setShowAdminInput(false);
+              setAdminPassword('');
+              setAdminPassword2('');
+              setMode('admin');
+            } else {
+              await signOut(auth);
+              Alert.alert('❌ Нет доступа', 'Этот аккаунт не является администратором');
+            }
+          } catch (e: any) {
+            Alert.alert('❌ Ошибка', 'Неверный email или пароль');
+          }
+          setLoading(false);
+        }}
+      >
+        <Text style={styles.bigBtnText}>Войти</Text>
+      </TouchableOpacity>
     </View>
-  );
+  </View>
+)}
 
   if (mode === 'choose') return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>

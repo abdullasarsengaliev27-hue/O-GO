@@ -12,7 +12,6 @@ const BUSINESS_CATEGORIES = [
   { id: 'food', label: 'Еда и рестораны', emoji: '🍔' },
   { id: 'tech', label: 'Техника и гаджеты', emoji: '💻' },
   { id: 'beauty', label: 'Косметика и парфюм', emoji: '💄' },
-  { id: 'general', label: 'Магазины', emoji: '📦' },
 ];
 
 const CITIES = ['Алматы', 'Астана', 'Шымкент', 'Актау', 'Актобе', 'Атырау', 'Павлодар', 'Караганда'];

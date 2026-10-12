@@ -48,6 +48,7 @@ export function SellerChats({ user }: { user: User }) {
       otherUserId={selectedChat.buyerId}
       otherUserName={selectedChat.buyerEmail?.split('@')[0] || 'Покупатель'}
       dealTitle={selectedChat.dealTitle}
+      isSeller={true}
       onBack={() => setSelectedChat(null)}
     />
   );

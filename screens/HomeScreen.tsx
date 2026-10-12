@@ -285,12 +285,11 @@ export function HomeScreen({ user, userCity, userRole }: {
                 { name: 'Одежда', icon: 'shirt' as keyof typeof Ionicons.glyphMap, cat: '👕 Одежда', color: '#EC4899' },
                 { name: 'Обувь', icon: 'footsteps' as keyof typeof Ionicons.glyphMap, cat: '👟 Обувь', color: '#F59E0B' },
                 { name: 'Косметика', icon: 'color-palette' as keyof typeof Ionicons.glyphMap, cat: '💄 Косметика', color: '#A855F7' },
-                { name: 'Магазины', icon: 'bag-handle' as keyof typeof Ionicons.glyphMap, cat: '📦 Магазин', color: '#10B981' },
                 { name: 'Все', icon: 'grid' as keyof typeof Ionicons.glyphMap, cat: 'Все', color: '#64748B' },
               ].map(item => (
                 <TouchableOpacity
                   key={item.name}
-                  style={{ width: '25%', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}
+                  style={{ width: '33.3%', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}
                   onPress={() => { setActiveCategory(item.cat); setShowDeals(true); }}
                 >
                   <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: item.color + '15', justifyContent: 'center', alignItems: 'center', marginBottom: 6, borderWidth: 1.5, borderColor: item.color + '30' }}>
