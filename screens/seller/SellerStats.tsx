@@ -175,8 +175,23 @@ function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: an
 
   return (
     <View style={{ backgroundColor: '#fff', borderRadius: 20, marginBottom: 12, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, opacity: isHidden ? 0.75 : 1 }}>
-      <View style={{ height: 4, backgroundColor: isHidden ? '#e0e0e0' : '#FF4500' }} />
+<View style={{ height: 4, backgroundColor: isHidden ? '#e0e0e0' : deal.isBoosted ? '#FFD700' : '#FF4500' }} />
 
+{/* Турбо-буст индикатор */}
+{deal.isBoosted && deal.boostedUntil && new Date(deal.boostedUntil) > new Date() && (
+  <View style={{ backgroundColor: '#FFF9E6', borderWidth: 1, borderColor: '#FFD700', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+    <Text style={{ fontSize: 18 }}>🚀</Text>
+    <View style={{ flex: 1 }}>
+      <Text style={{ color: '#F59E0B', fontWeight: '800', fontSize: 13 }}>Турбо-буст активен!</Text>
+      <Text style={{ color: '#999', fontSize: 11 }}>
+        Закреплён в топе до {new Date(deal.boostedUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      </Text>
+    </View>
+    <View style={{ backgroundColor: '#FFD700', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>№1 в ленте</Text>
+    </View>
+  </View>
+)}
       <View style={{ padding: 14 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
           {/* Бейдж */}

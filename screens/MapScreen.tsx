@@ -52,22 +52,17 @@ const [mapPromotions, setMapPromotions] = useState<string[]>([]);
       setDeals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }, []);
+  
 
   useEffect(() => {
-    const now = new Date().toISOString();
-    return onSnapshot(
-      query(collection(db, 'promotions'),
-        where('type', '==', 'map'),
-        where('status', '==', 'approved')
-      ),
-      snap => {
-        const active = snap.docs
-          .map(d => d.data())
-          .filter((p: any) => p.expiresAt && p.expiresAt > now)
-          .map((p: any) => p.sellerId);
-        setMapPromotions(active);
-      }
-    );
+    return onSnapshot(collection(db, 'users'), snap => {
+      const now = new Date().toISOString();
+      const highlighted = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter((u: any) => u.mapHighlighted && u.mapHighlightedUntil > now)
+        .map((u: any) => u.id);
+      setMapPromotions(highlighted);
+    });
   }, []);
 
   const filtered = deals

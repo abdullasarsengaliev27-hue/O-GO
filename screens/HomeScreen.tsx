@@ -226,16 +226,11 @@ export function HomeScreen({ user, userCity, userRole }: {
   }, []);
 
   useEffect(() => {
-    const q = query(
-      collection(db, 'promotions'),
-      where('type', '==', 'banner'),
-      where('status', '==', 'approved')
-    );
-    return onSnapshot(q, snap => {
-      const now = new Date();
+    return onSnapshot(collection(db, 'users'), snap => {
+      const now = new Date().toISOString();
       const active = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
-        .filter((p: any) => p.expiresAt && new Date(p.expiresAt) > now);
+        .filter((u: any) => u.hasBanner && u.bannerUntil && u.bannerUntil > now);
       setActiveBanners(active);
     });
   }, []);
@@ -285,7 +280,6 @@ export function HomeScreen({ user, userCity, userRole }: {
                 { name: 'Одежда', icon: 'shirt' as keyof typeof Ionicons.glyphMap, cat: '👕 Одежда', color: '#EC4899' },
                 { name: 'Обувь', icon: 'footsteps' as keyof typeof Ionicons.glyphMap, cat: '👟 Обувь', color: '#F59E0B' },
                 { name: 'Косметика', icon: 'color-palette' as keyof typeof Ionicons.glyphMap, cat: '💄 Косметика', color: '#A855F7' },
-                { name: 'Все', icon: 'grid' as keyof typeof Ionicons.glyphMap, cat: 'Все', color: '#64748B' },
               ].map(item => (
                 <TouchableOpacity
                   key={item.name}
@@ -307,14 +301,11 @@ export function HomeScreen({ user, userCity, userRole }: {
               {banner.bannerImage
                 ? <Image source={{ uri: banner.bannerImage }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
                 : <View style={{ backgroundColor: '#FF4500', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
-                      <Text style={{ fontSize: 28 }}>🔥</Text>
-                    </View>
                     <View style={{ flex: 1 }}>
                       <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginBottom: 4 }}>
                         <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>⚡ РАСПРОДАЖА ДНЯ</Text>
                       </View>
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{banner.sellerEmail?.split('@')[0] || 'Магазин'}</Text>
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{banner.storeName || 'Магазин'}</Text>
                       <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Специальные скидки только сегодня!</Text>
                     </View>
                     <TouchableOpacity

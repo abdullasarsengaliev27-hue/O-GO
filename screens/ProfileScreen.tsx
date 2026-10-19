@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, onSnapshot, query, where, addDoc } from 'firebase/firestore';
@@ -52,6 +52,12 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPassword2, setAdminPassword2] = useState('');
 
+  const [showSupportModal, setShowSupportModal] = useState(false);
+const [supportText, setSupportText] = useState('');
+const [supportTopic, setSupportTopic] = useState('');
+const [supportDeals, setSupportDeals] = useState<any[]>([]);
+const [selectedSupportDeal, setSelectedSupportDeal] = useState<any>(null);
+
   useEffect(() => {
     if (!user || userRole !== 'seller') return;
     const unsubProfile = onSnapshot(doc(db, 'users', user.uid), snap => {
@@ -91,6 +97,14 @@ return onSnapshot(q, snap => {
     });
   }, [user, userRole]);
 
+  useEffect(() => {
+    if (!user || userRole !== 'buyer') return;
+    const q = query(collection(db, 'deals'), where('isHidden', '!=', true));
+    return onSnapshot(q, snap => {
+      setSupportDeals(snap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 50));
+    });
+  }, [user, userRole]);
+
   const BackBtn = () => (
     <TouchableOpacity onPress={() => setScreen('profile')} style={{ padding: 16 }}>
       <Text style={{ color: '#FF4500', fontSize: 16 }}>← Назад</Text>
@@ -100,6 +114,41 @@ return onSnapshot(q, snap => {
   if (user && userRole === 'admin') {
     return <AdminScreen onBack={() => signOut(auth)} />;
   }
+
+  const sendSupport = async (topic: string) => {
+    setSupportTopic(topic);
+    setShowSupportModal(true);
+  };
+  
+  const submitSupport = async () => {
+    if (!user) {
+      return Alert.alert('Ошибка', 'Сначала войди в аккаунт');
+    }
+  
+    if (!supportText.trim()) {
+      return Alert.alert('Ошибка', 'Напиши текст жалобы');
+    }
+  
+    try {
+      await addDoc(collection(db, 'support'), {
+        userId: user.uid,
+        userEmail: user.email,
+        topic: supportTopic,
+        message: supportText,
+        dealId: selectedSupportDeal?.id || null,
+        dealTitle: selectedSupportDeal?.title || null,
+        storeName: selectedSupportDeal?.store || null,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+      setShowSupportModal(false);
+      setSupportText('');
+      setSelectedSupportDeal(null);
+      Alert.alert('✅ Жалоба отправлена!', 'Администратор рассмотрит ваше обращение в течение 24 часов.');
+    } catch (e: any) {
+      Alert.alert('Ошибка', e.message);
+    }
+  };
 
   // Залогинен
   if (user) {
@@ -349,21 +398,7 @@ return onSnapshot(q, snap => {
       </ScrollView>
     );
 
-   // Профиль покупателя
-const sendSupport = async (topic: string) => {
-  try {
-    await addDoc(collection(db, 'support'), {
-      userId: user.uid,
-      userEmail: user.email,
-      topic,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-    });
-    Alert.alert('✅ Жалоба отправлена!', 'Администратор рассмотрит ваше обращение в течение 24 часов.');
-  } catch (e: any) {
-    Alert.alert('Ошибка', e.message);
-  }
-};
+    
 
 return (
       <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
@@ -441,32 +476,7 @@ return (
           </TouchableOpacity>
         </View>
     
-{/* Поддержка */}
-<TouchableOpacity
-  style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 }}
-  onPress={() => {
-    Alert.alert(
-      '🆘 Поддержка и жалобы',
-      'Выберите тему обращения:',
-      [
-        { text: '❌ Неработающая скидка', onPress: () => sendSupport('Неработающая скидка') },
-        { text: '💰 Неверная цена', onPress: () => sendSupport('Неверная цена') },
-        { text: '🏪 Закрытый магазин', onPress: () => sendSupport('Закрытый магазин') },
-        { text: '📋 Недостоверная информация', onPress: () => sendSupport('Недостоверная информация') },
-        { text: 'Отмена', style: 'cancel' },
-      ]
-    );
-  }}
->
-  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center' }}>
-    <Ionicons name="warning-outline" size={22} color="#EF4444" />
-  </View>
-  <View style={{ flex: 1 }}>
-    <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Поддержка и жалобы</Text>
-    <Text style={{ color: '#999', fontSize: 12 }}>Пожаловаться на скидку или магазин</Text>
-  </View>
-  <Ionicons name="chevron-forward" size={18} color="#ccc" />
-</TouchableOpacity>
+
 
         {/* Настройки */}
         <View style={{ marginHorizontal: 16, gap: 10, marginBottom: 24 }}>
@@ -507,6 +517,33 @@ return (
             </View>
           </View>
     
+{/* Поддержка */}
+<TouchableOpacity
+  style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 }}
+  onPress={() => {
+    Alert.alert(
+      '🆘 Поддержка и жалобы',
+      'Выберите тему обращения:',
+      [
+        { text: '❌ Неработающая скидка', onPress: () => sendSupport('Неработающая скидка') },
+        { text: '💰 Неверная цена', onPress: () => sendSupport('Неверная цена') },
+        { text: '🏪 Закрытый магазин', onPress: () => sendSupport('Закрытый магазин') },
+        { text: '📋 Недостоверная информация', onPress: () => sendSupport('Недостоверная информация') },
+        { text: 'Отмена', style: 'cancel' },
+      ]
+    );
+  }}
+>
+  <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center' }}>
+    <Ionicons name="warning-outline" size={22} color="#EF4444" />
+  </View>
+  <View style={{ flex: 1 }}>
+    <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Поддержка и жалобы</Text>
+    <Text style={{ color: '#999', fontSize: 12 }}>Пожаловаться на скидку или магазин</Text>
+  </View>
+  <Ionicons name="chevron-forward" size={18} color="#ccc" />
+</TouchableOpacity>
+
           <TouchableOpacity
             style={{ backgroundColor: '#FFF0EB', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }}
             onPress={() => signOut(auth)}
@@ -801,6 +838,77 @@ Alert.alert(
             )}
           </>
         )}
+
+{/* Модал жалобы */}
+<Modal visible={showSupportModal} transparent animationType="slide" onRequestClose={() => setShowSupportModal(false)}>
+  <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+    <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }}>
+      <ScrollView contentContainerStyle={{ padding: 24 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: '#1a1a1a' }}>🆘 {supportTopic}</Text>
+          <TouchableOpacity onPress={() => setShowSupportModal(false)}>
+            <Ionicons name="close" size={24} color="#999" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Выбор скидки */}
+        <Text style={{ fontWeight: '700', color: '#333', marginBottom: 10 }}>📦 Выбери скидку (необязательно):</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+          {supportDeals.slice(0, 20).map(deal => (
+            <TouchableOpacity
+              key={deal.id}
+              onPress={() => setSelectedSupportDeal(selectedSupportDeal?.id === deal.id ? null : deal)}
+              style={{ width: 120, marginRight: 10, borderRadius: 14, overflow: 'hidden', borderWidth: 2, borderColor: selectedSupportDeal?.id === deal.id ? '#FF4500' : 'transparent' }}
+            >
+              {deal.imageUrl
+                ? <Image source={{ uri: deal.imageUrl }} style={{ width: 120, height: 80 }} resizeMode="cover" />
+                : <View style={{ width: 120, height: 80, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
+                    <Text style={{ color: '#FF4500', fontWeight: '800' }}>-{deal.discount}%</Text>
+                  </View>
+              }
+              <View style={{ padding: 6, backgroundColor: selectedSupportDeal?.id === deal.id ? '#FFF0EB' : '#f8f8f8' }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#1a1a1a' }} numberOfLines={1}>{deal.title}</Text>
+                <Text style={{ fontSize: 10, color: '#999' }}>{deal.store}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {selectedSupportDeal && (
+          <View style={{ backgroundColor: '#FFF0EB', borderRadius: 12, padding: 10, marginBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="checkmark-circle" size={18} color="#FF4500" />
+            <Text style={{ color: '#FF4500', fontWeight: '700', flex: 1 }} numberOfLines={1}>
+              {selectedSupportDeal.title} — {selectedSupportDeal.store}
+            </Text>
+            <TouchableOpacity onPress={() => setSelectedSupportDeal(null)}>
+              <Ionicons name="close" size={16} color="#FF4500" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Текст жалобы */}
+        <Text style={{ fontWeight: '700', color: '#333', marginBottom: 8 }}>✍️ Опиши проблему *</Text>
+        <TextInput
+          style={{ backgroundColor: '#f8f8f8', borderRadius: 14, padding: 14, fontSize: 15, minHeight: 100, borderWidth: 1.5, borderColor: '#f0f0f0', color: '#1a1a1a' }}
+          placeholder="Опиши подробно что произошло..."
+          value={supportText}
+          onChangeText={setSupportText}
+          multiline
+          placeholderTextColor="#ccc"
+        />
+
+        <TouchableOpacity
+          style={{ backgroundColor: '#FF4500', borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginTop: 16 }}
+          onPress={submitSupport}
+        >
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>Отправить жалобу</Text>
+        </TouchableOpacity>
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    </View>
+  </View>
+</Modal>
+
       </ScrollView>
     </View>
   );

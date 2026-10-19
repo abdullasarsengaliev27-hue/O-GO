@@ -15,7 +15,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export function AdminScreen({ onBack }: { onBack: () => void }) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'sellers' | 'promotions' | 'deals' | 'orders'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sellers' | 'promotions' | 'deals' | 'orders' | 'support'>('dashboard');
   const [applications, setApplications] = useState<any[]>([]);
   const [promotionRequests, setPromotionRequests] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
@@ -26,6 +26,8 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
+  const [allSupport, setAllSupport] = useState<any[]>([]);
+  
 
   useEffect(() => {
     const unsubs: any[] = [];
@@ -45,6 +47,10 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
     }));
     unsubs.push(onSnapshot(collection(db, 'orders'), snap => {
       setAllOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }));
+    unsubs.push(onSnapshot(collection(db, 'support'), snap => {
+      setAllSupport(snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
     }));
     return () => unsubs.forEach(u => u());
   }, []);
@@ -95,19 +101,48 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
     const hours = p.planId?.includes('24h') ? 24 : p.planId?.includes('3d') ? 72 : 168;
     const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
     try {
-      await updateDoc(doc(db, 'promotions', p.id), { status: 'approved', expiresAt, approvedAt: new Date().toISOString() });
+      await updateDoc(doc(db, 'promotions', p.id), {
+        status: 'approved',
+        expiresAt,
+        approvedAt: new Date().toISOString(),
+      });
+  
       if (p.type === 'turbo') {
         if (p.dealId) {
-          await updateDoc(doc(db, 'deals', p.dealId), { isBoosted: true, boostedUntil: expiresAt });
+          await updateDoc(doc(db, 'deals', p.dealId), {
+            isBoosted: true,
+            boostedUntil: expiresAt,
+          });
         } else {
           const dealsSnap = await getDocs(query(collection(db, 'deals'), where('sellerId', '==', p.sellerId)));
           for (const d of dealsSnap.docs) {
-            await updateDoc(doc(db, 'deals', d.id), { isBoosted: true, boostedUntil: expiresAt });
+            await updateDoc(doc(db, 'deals', d.id), {
+              isBoosted: true,
+              boostedUntil: expiresAt,
+            });
           }
         }
       }
+  
+      if (p.type === 'map') {
+        await updateDoc(doc(db, 'users', p.sellerId), {
+          mapHighlighted: true,
+          mapHighlightedUntil: expiresAt,
+        });
+      }
+  
+      if (p.type === 'banner') {
+        await updateDoc(doc(db, 'users', p.sellerId), {
+          hasBanner: true,
+          bannerUntil: expiresAt,
+          bannerImage: p.bannerImage || null,
+        });
+      }
+  
       Alert.alert('✅ Активировано!', `${p.promoTitle} на ${p.planLabel}`);
-    } catch (e: any) { Alert.alert('Ошибка', e.message); }
+    } catch (e: any) {
+      Alert.alert('Ошибка', e.message);
+    }
   };
 
   const rejectPromotion = async (p: any) => {
@@ -208,6 +243,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
           { id: 'promotions', label: `⚡ Продвижение ${promotionCount > 0 ? `(${promotionCount})` : ''}` },
           { id: 'deals', label: '🏷 Скидки' },
           { id: 'orders', label: '📦 Заказы' },
+          { id: 'support', label: '🆘 Жалобы' },
         ].map(tab => (
           <TouchableOpacity
             key={tab.id}
@@ -420,6 +456,53 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
           ))}
         </ScrollView>
       )}
+
+{activeTab === 'support' && (
+  <ScrollView contentContainerStyle={{ padding: 12 }}>
+    <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>
+      Жалобы покупателей
+    </Text>
+    {/* Загружаем жалобы */}
+    {allSupport?.length === 0 ? (
+      <View style={[styles.center, { marginTop: 40 }]}>
+        <Text style={{ fontSize: 48, marginBottom: 12 }}>🆘</Text>
+        <Text style={{ color: '#aaa' }}>Жалоб пока нет</Text>
+      </View>
+    ) : allSupport?.map((s: any) => (
+      <View key={s.id} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10, elevation: 2 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+          <Text style={{ fontWeight: '800', color: '#EF4444', fontSize: 15 }}>🆘 {s.topic}</Text>
+          <View style={{ backgroundColor: s.status === 'resolved' ? '#E8F5E9' : '#FFF9E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+            <Text style={{ color: s.status === 'resolved' ? '#4CAF50' : '#FF9800', fontWeight: '700', fontSize: 11 }}>
+              {s.status === 'resolved' ? '✅ Решено' : '⏳ Новая'}
+            </Text>
+          </View>
+        </View>
+        <Text style={{ color: '#666', fontSize: 13 }}>👤 {s.userEmail}</Text>
+        {s.dealTitle && <Text style={{ color: '#FF4500', fontSize: 13 }}>📦 {s.dealTitle} — {s.storeName}</Text>}
+        {s.message && (
+          <View style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 10, marginTop: 8 }}>
+            <Text style={{ color: '#333', fontSize: 14 }}>{s.message}</Text>
+          </View>
+        )}
+        <Text style={{ color: '#ccc', fontSize: 11, marginTop: 6 }}>
+          {s.createdAt ? new Date(s.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+        </Text>
+        {s.status !== 'resolved' && (
+          <TouchableOpacity
+            style={{ backgroundColor: '#E8F5E9', borderRadius: 10, padding: 10, alignItems: 'center', marginTop: 10 }}
+            onPress={async () => {
+              await updateDoc(doc(db, 'support', s.id), { status: 'resolved' });
+              Alert.alert('✅ Отмечено как решено');
+            }}
+          >
+            <Text style={{ color: '#4CAF50', fontWeight: '700' }}>✅ Отметить как решено</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    ))}
+  </ScrollView>
+)}
 
       {/* Все заказы */}
       {activeTab === 'orders' && (

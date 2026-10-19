@@ -53,33 +53,59 @@ export default function App() {
   useEffect(() => {
     return onAuthStateChanged(auth, async (u) => {
       setUser(u);
+
       if (u) {
-        // Сначала проверяем админа
-        const adminSnap = await getDoc(doc(db, 'admins', u.uid));
-        if (adminSnap.exists() && adminSnap.data().role === 'admin') {
-          setUserRole('admin');
-          return;
-        }
-        const snap = await getDoc(doc(db, 'users', u.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          setUserRole(data.role);
-          // Для покупателя берём его город
-          if (data.role === 'buyer' && data.buyerCity && !userCity) {
-            setUserCity(data.buyerCity);
-            await AsyncStorage.setItem('userCity', data.buyerCity);
+        try {
+          const adminSnap = await getDoc(doc(db, 'admins', u.uid));
+
+          if (adminSnap.exists() && adminSnap.data().role === 'admin') {
+            setUserRole('admin');
+            return;
           }
+
+          const snap = await getDoc(doc(db, 'users', u.uid));
+
+          if (snap.exists()) {
+            const data = snap.data();
+            setUserRole(data.role);
+
+            // Для покупателя берём его город
+            if (
+              data.role === 'buyer' &&
+              data.buyerCity &&
+              !userCity
+            ) {
+              setUserCity(data.buyerCity);
+              await AsyncStorage.setItem('userCity', data.buyerCity);
+            }
+          } else {
+            setUserRole('buyer');
+          }
+        } catch (error) {
+          console.error('Ошибка загрузки профиля:', error);
+          setUserRole('buyer');
         }
+
         await registerForPushNotifications(u.uid);
-      } else setUserRole('');
+      } else {
+        setUserRole('');
+      }
     });
   }, []);
+
 
   if (!appReady) return (
     <View style={{ flex: 1, backgroundColor: '#FF4500', justifyContent: 'center', alignItems: 'center' }}>
       <Text style={{ fontSize: 64, fontWeight: 'bold', color: '#fff', letterSpacing: 4 }}>O-GO</Text>
       <Text style={{ fontSize: 18, color: '#fff', marginTop: 12, opacity: 0.9 }}>Все скидки в одном месте</Text>
       <ActivityIndicator size="large" color="#fff" style={{ marginTop: 40 }} />
+    </View>
+  );
+
+  if (appReady && user && userRole === '') return (
+    <View style={{ flex: 1, backgroundColor: '#FF4500', justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator size="large" color="#fff" />
+      <Text style={{ color: '#fff', marginTop: 16, fontSize: 14 }}>Загрузка профиля...</Text>
     </View>
   );
 
