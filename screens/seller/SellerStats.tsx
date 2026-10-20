@@ -14,7 +14,7 @@ export function SellerStats({ user }: { user: User }) {
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
+    const q = query(collection(db, 'deals'), where('sellerId', '==', user.uid));
         return onSnapshot(q, async snap => {
       const myDeals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setDeals(myDeals);

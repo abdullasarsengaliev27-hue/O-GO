@@ -98,8 +98,19 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   };
 
   const approvePromotion = async (p: any) => {
+    console.log('=== APPROVE PROMOTION ===');
+    console.log('type:', p.type);
+    console.log('dealId:', p.dealId);
+    console.log('sellerId:', p.sellerId);
+    console.log('planId:', p.planId);
+    
     const hours = p.planId?.includes('24h') ? 24 : p.planId?.includes('3d') ? 72 : 168;
+    console.log('hours calculated:', hours);
     const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    console.log('expiresAt:', expiresAt);
+
+    console.log('Approving:', p.type, p.dealId, p.sellerId, p.planId);
+    console.log('Hours:', hours);
     try {
       await updateDoc(doc(db, 'promotions', p.id), {
         status: 'approved',
@@ -109,34 +120,34 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   
       if (p.type === 'turbo') {
         if (p.dealId) {
-          await updateDoc(doc(db, 'deals', p.dealId), {
+          await setDoc(doc(db, 'deals', p.dealId), {
             isBoosted: true,
             boostedUntil: expiresAt,
-          });
+          }, { merge: true });
         } else {
           const dealsSnap = await getDocs(query(collection(db, 'deals'), where('sellerId', '==', p.sellerId)));
           for (const d of dealsSnap.docs) {
-            await updateDoc(doc(db, 'deals', d.id), {
+            await setDoc(doc(db, 'deals', d.id), {
               isBoosted: true,
               boostedUntil: expiresAt,
-            });
+            }, { merge: true });
           }
         }
-      }
+        }
   
       if (p.type === 'map') {
-        await updateDoc(doc(db, 'users', p.sellerId), {
+        await setDoc(doc(db, 'users', p.sellerId), {
           mapHighlighted: true,
           mapHighlightedUntil: expiresAt,
-        });
+        }, { merge: true });
       }
-  
+      
       if (p.type === 'banner') {
-        await updateDoc(doc(db, 'users', p.sellerId), {
+        await setDoc(doc(db, 'users', p.sellerId), {
           hasBanner: true,
           bannerUntil: expiresAt,
           bannerImage: p.bannerImage || null,
-        });
+        }, { merge: true });
       }
   
       Alert.alert('✅ Активировано!', `${p.promoTitle} на ${p.planLabel}`);
