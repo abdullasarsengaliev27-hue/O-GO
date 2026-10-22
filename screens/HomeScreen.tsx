@@ -19,6 +19,15 @@ const BANNERS = [
   { id: '3', emoji: '📱', title: 'Техника дешевле', subtitle: 'Лучшие предложения', color: '#E63946' },
 ];
 
+const CATEGORY_ICONS: Record<string, { icon: keyof typeof Ionicons.glyphMap, color: string }> = {
+  'Все': { icon: 'flash', color: '#FF4500' },
+  '🍕 Еда': { icon: 'restaurant', color: '#FF6B35' },
+  '📱 Техника': { icon: 'phone-portrait', color: '#6366F1' },
+  '👕 Одежда': { icon: 'shirt', color: '#EC4899' },
+  '👟 Обувь': { icon: 'footsteps', color: '#F59E0B' },
+  '💄 Косметика': { icon: 'color-palette', color: '#A855F7' },
+};
+
 function HappyHoursBanner() {
   const [activeHH, setActiveHH] = useState<any[]>([]);
   const [selectedHH, setSelectedHH] = useState<any>(null);
@@ -203,7 +212,7 @@ export function HomeScreen({ user, userCity, userRole }: {
   const [bannerIndex, setBannerIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('Все');
-  const [showDeals, setShowDeals] = useState(false);
+  const [screenMode, setScreenMode] = useState<'home' | 'category' | 'search'>('home');
   const [activeBanners, setActiveBanners] = useState<any[]>([]);
   const isFirstLoad = useRef(true);
 
@@ -258,171 +267,240 @@ export function HomeScreen({ user, userCity, userRole }: {
       return 0;
     });
 
-  if (!showDeals) {
+  // Экран категории — показывает отфильтрованные скидки
+  if (screenMode === 'category') {
+    const catInfo = CATEGORY_ICONS[activeCategory] || { icon: 'flash' as keyof typeof Ionicons.glyphMap, color: '#FF4500' };
     return (
       <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-        <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 24, paddingHorizontal: 16 }}>
-          <Text style={{ color: '#fff', fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 }}>O-GO</Text>
-          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, textAlign: 'center', marginBottom: 16 }}>Все скидки в одном месте!</Text>
-          <TouchableOpacity onPress={() => setShowDeals(true)} style={{ backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="search" size={20} color="#aaa" style={{ marginRight: 8 }} />
-            <Text style={{ color: '#aaa', fontSize: 16 }}>Поиск скидок и акций</Text>
+        <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={() => { setScreenMode('home'); setActiveCategory('Все'); }}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
+          <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name={catInfo.icon} size={20} color="#fff" />
+          </View>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', flex: 1 }}>
+            {activeCategory === 'Все' ? 'Все скидки' : activeCategory}
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>{filtered.length} скидок</Text>
         </View>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-          {/* Категории */}
-          <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-              {[
-                { name: 'Все скидки', icon: 'flash' as keyof typeof Ionicons.glyphMap, cat: 'Все', color: '#FF4500' },
-                { name: 'Еда', icon: 'restaurant' as keyof typeof Ionicons.glyphMap, cat: '🍕 Еда', color: '#FF6B35' },
-                { name: 'Техника', icon: 'phone-portrait' as keyof typeof Ionicons.glyphMap, cat: '📱 Техника', color: '#6366F1' },
-                { name: 'Одежда', icon: 'shirt' as keyof typeof Ionicons.glyphMap, cat: '👕 Одежда', color: '#EC4899' },
-                { name: 'Обувь', icon: 'footsteps' as keyof typeof Ionicons.glyphMap, cat: '👟 Обувь', color: '#F59E0B' },
-                { name: 'Косметика', icon: 'color-palette' as keyof typeof Ionicons.glyphMap, cat: '💄 Косметика', color: '#A855F7' },
-              ].map(item => (
-                <TouchableOpacity
-                  key={item.name}
-                  style={{ width: '33.3%', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}
-                  onPress={() => { setActiveCategory(item.cat); setShowDeals(true); }}
-                >
-                  <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: item.color + '15', justifyContent: 'center', alignItems: 'center', marginBottom: 6, borderWidth: 1.5, borderColor: item.color + '30' }}>
-                    <Ionicons name={item.icon} size={24} color={item.color} />
-                  </View>
-                  <Text style={{ fontSize: 11, color: '#444', textAlign: 'center', fontWeight: '600', lineHeight: 14 }}>{item.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
 
-          {/* Платные баннеры продавцов */}
-          {activeBanners.map((banner: any) => (
-            <View key={banner.id} style={{ borderRadius: 20, marginBottom: 12, overflow: 'hidden', elevation: 4 }}>
-              {banner.bannerImage
-                ? <Image source={{ uri: banner.bannerImage }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
-                : <View style={{ backgroundColor: '#FF4500', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginBottom: 4 }}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>⚡ РАСПРОДАЖА ДНЯ</Text>
-                      </View>
-                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{banner.storeName || 'Магазин'}</Text>
-                      <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Специальные скидки только сегодня!</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={{ backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}
-                      onPress={() => { setActiveCategory('Все'); setShowDeals(true); }}
-                    >
-                      <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>Смотреть</Text>
-                    </TouchableOpacity>
-                  </View>
-              }
-              {banner.bannerImage && (
-                <TouchableOpacity
-                  style={{ position: 'absolute', bottom: 10, right: 10, backgroundColor: '#FF4500', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}
-                  onPress={() => { setActiveCategory('Все'); setShowDeals(true); }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Смотреть →</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          ))}
-
-          {/* Обычный баннер-слайдер */}
-          <View style={[styles.banner, { backgroundColor: BANNERS[bannerIndex].color, marginHorizontal: 0 }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bannerTitle}>{BANNERS[bannerIndex].title}</Text>
-              <Text style={styles.bannerSubtitle}>{BANNERS[bannerIndex].subtitle}</Text>
-              <TouchableOpacity style={styles.bannerBadge} onPress={() => setShowDeals(true)}>
-                <Text style={{ color: '#FF4500', fontWeight: 'bold', fontSize: 13 }}>Смотреть все →</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={{ fontSize: 64 }}>{BANNERS[bannerIndex].emoji}</Text>
-          </View>
-
-          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10, marginBottom: 16 }}>
-            {BANNERS.map((_, i) => (
-              <View key={i} style={{ width: i === bannerIndex ? 20 : 8, height: 8, borderRadius: 4, backgroundColor: i === bannerIndex ? '#FF4500' : '#ddd' }} />
-            ))}
-          </View>
-
-          <HappyHoursBanner />
-
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#222' }}>🔥 Горячие скидки</Text>
-            <TouchableOpacity onPress={() => setShowDeals(true)}>
-              <Text style={{ color: '#FF4500', fontWeight: '600' }}>Смотреть все</Text>
+        {/* Фильтры города */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: '#fff', maxHeight: 50 }} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+          {CITIES.map(city => (
+            <TouchableOpacity key={city} onPress={() => setActiveCity(city)} style={{ paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: activeCity === city ? '#FF4500' : '#f0f0f0' }}>
+              <Text style={{ color: activeCity === city ? '#fff' : '#666', fontSize: 13, fontWeight: '600' }}>{city}</Text>
             </TouchableOpacity>
-          </View>
-
-          {deals.filter(d => !d.isHidden).slice(0, 3).map(deal => (
-            <DealCard key={deal.id} item={deal} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />
           ))}
         </ScrollView>
+
+        {/* Сортировка */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: '#fff', maxHeight: 46, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+          {(['new', 'discount', 'price'] as const).map(s => (
+            <TouchableOpacity key={s} onPress={() => setSortBy(s)} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, backgroundColor: sortBy === s ? '#FF4500' : '#f0f0f0' }}>
+              <Text style={{ color: sortBy === s ? '#fff' : '#666', fontSize: 13, fontWeight: '600' }}>
+                {s === 'new' ? '🆕 Новые' : s === 'discount' ? '🔥 По скидке' : '💰 По цене'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => <DealCard item={item} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />}
+          contentContainerStyle={{ padding: 12 }}
+          ListEmptyComponent={
+            <View style={[styles.center, { marginTop: 60 }]}>
+              <Text style={{ fontSize: 48, marginBottom: 12 }}>😔</Text>
+              <Text style={{ color: '#aaa', fontSize: 16, textAlign: 'center' }}>
+                {activeCategory === 'Все' ? 'Скидок пока нет' : `Скидок в категории "${activeCategory}" нет`}
+              </Text>
+            </View>
+          }
+        />
       </View>
     );
   }
 
-  return (
-    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
-        <TouchableOpacity onPress={() => setShowDeals(false)} style={{ marginRight: 10 }}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="search" size={18} color="#aaa" style={{ marginRight: 8 }} />
-          <TextInput style={{ flex: 1, fontSize: 15, color: '#222' }} placeholder="Поиск скидок..." value={searchQuery} onChangeText={setSearchQuery} autoFocus placeholderTextColor="#aaa" />
+  // Экран поиска
+  if (screenMode === 'search') {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+        <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 12, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => { setScreenMode('home'); setSearchQuery(''); setActiveCategory('Все'); }} style={{ marginRight: 10 }}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center' }}>
+            <Ionicons name="search" size={18} color="#aaa" style={{ marginRight: 8 }} />
+            <TextInput
+              style={{ flex: 1, fontSize: 15, color: '#222' }}
+              placeholder="Поиск скидок..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+              placeholderTextColor="#aaa"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color="#aaa" />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
-      </View>
-      <FlatList
-        data={filtered}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <DealCard item={item} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />}
-        contentContainerStyle={{ padding: 12, paddingTop: 0 }}
-        ListHeaderComponent={
-          <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-              {CATEGORIES.map(cat => (
-                <TouchableOpacity key={cat} style={[styles.categoryBtn, activeCategory === cat && styles.categoryBtnActive]} onPress={() => setActiveCategory(cat)}>
-                  <Text style={styles.categoryText}>{cat}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <View style={{ backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="location" size={18} color="#FF4500" style={{ marginRight: 6 }} />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {CITIES.map(city => (
-                  <TouchableOpacity key={city} style={{ paddingHorizontal: 12, paddingVertical: 5, borderRadius: 16, marginRight: 6, backgroundColor: activeCity === city ? '#FF4500' : '#f0f0f0' }} onPress={() => setActiveCity(city)}>
-                    <Text style={{ color: activeCity === city ? '#fff' : '#666', fontSize: 13, fontWeight: '600' }}>{city}</Text>
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => <DealCard item={item} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />}
+          contentContainerStyle={{ padding: 12, paddingTop: 0 }}
+          ListHeaderComponent={
+            <View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+                {CATEGORIES.map(cat => (
+                  <TouchableOpacity key={cat} style={[styles.categoryBtn, activeCategory === cat && styles.categoryBtnActive]} onPress={() => setActiveCategory(cat)}>
+                    <Text style={styles.categoryText}>{cat}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-            </View>
-            <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-              <Text style={{ color: '#999', fontSize: 13, marginBottom: 8 }}>Найдено: <Text style={{ color: '#FF4500', fontWeight: 'bold' }}>{filtered.length}</Text> скидок</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-                {(['new', 'discount', 'price'] as const).map(s => (
-                  <TouchableOpacity key={s} style={[styles.sortBtn, sortBy === s && styles.sortBtnActive]} onPress={() => setSortBy(s)}>
-                    <Text style={[styles.sortText, sortBy === s && styles.sortTextActive]}>{s === 'new' ? '🆕 Новые' : s === 'discount' ? '🔥 По скидке' : '💰 По цене'}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {[0, 30, 50, 70, 90].map(pct => (
-                  <TouchableOpacity key={pct} style={[styles.sortBtn, minDiscount === pct && styles.sortBtnActive]} onPress={() => setMinDiscount(pct)}>
-                    <Text style={[styles.sortText, minDiscount === pct && styles.sortTextActive]}>{pct === 0 ? 'Все' : `${pct}%+`}</Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Text style={{ color: '#999', fontSize: 13, marginBottom: 8 }}>
+                  Найдено: <Text style={{ color: '#FF4500', fontWeight: 'bold' }}>{filtered.length}</Text> скидок
+                </Text>
               </View>
             </View>
+          }
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={{ fontSize: 40, marginBottom: 12 }}>😔</Text>
+              <Text style={{ color: '#aaa', fontSize: 16, textAlign: 'center' }}>
+                {searchQuery ? `Ничего не найдено по "${searchQuery}"` : 'Скидок пока нет'}
+              </Text>
+            </View>
+          }
+        />
+      </View>
+    );
+  }
+
+  // Главный экран
+  return (
+    <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 24, paddingHorizontal: 16 }}>
+        <Text style={{ color: '#fff', fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 }}>O-GO</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, textAlign: 'center', marginBottom: 16 }}>Все скидки в одном месте!</Text>
+        <TouchableOpacity
+          onPress={() => setScreenMode('search')}
+          style={{ backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' }}
+        >
+          <Ionicons name="search" size={20} color="#aaa" style={{ marginRight: 8 }} />
+          <Text style={{ color: '#aaa', fontSize: 16 }}>Поиск скидок и акций</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+        {/* Категории */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+            {[
+              { name: 'Все скидки', icon: 'flash' as keyof typeof Ionicons.glyphMap, cat: 'Все', color: '#FF4500' },
+              { name: 'Еда', icon: 'restaurant' as keyof typeof Ionicons.glyphMap, cat: '🍕 Еда', color: '#FF6B35' },
+              { name: 'Техника', icon: 'phone-portrait' as keyof typeof Ionicons.glyphMap, cat: '📱 Техника', color: '#6366F1' },
+              { name: 'Одежда', icon: 'shirt' as keyof typeof Ionicons.glyphMap, cat: '👕 Одежда', color: '#EC4899' },
+              { name: 'Обувь', icon: 'footsteps' as keyof typeof Ionicons.glyphMap, cat: '👟 Обувь', color: '#F59E0B' },
+              { name: 'Косметика', icon: 'color-palette' as keyof typeof Ionicons.glyphMap, cat: '💄 Косметика', color: '#A855F7' },
+            ].map(item => (
+              <TouchableOpacity
+                key={item.name}
+                style={{ width: '33.3%', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}
+                onPress={() => {
+                  setActiveCategory(item.cat);
+                  setActiveCity('Все');
+                  setSortBy('new');
+                  setScreenMode('category');
+                }}
+              >
+                <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: item.color + '15', justifyContent: 'center', alignItems: 'center', marginBottom: 6, borderWidth: 1.5, borderColor: item.color + '30' }}>
+                  <Ionicons name={item.icon} size={24} color={item.color} />
+                </View>
+                <Text style={{ fontSize: 11, color: '#444', textAlign: 'center', fontWeight: '600', lineHeight: 14 }}>{item.name}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        }
-        ListEmptyComponent={
-          <View style={styles.center}>
-            <Text style={{ fontSize: 40, marginBottom: 12 }}>😔</Text>
-            <Text style={{ color: '#aaa', fontSize: 16, textAlign: 'center' }}>Скидок пока нет</Text>
+        </View>
+
+        {/* Платные баннеры продавцов */}
+        {activeBanners.map((banner: any) => (
+          <TouchableOpacity
+            key={banner.id}
+            style={{ borderRadius: 20, marginBottom: 12, overflow: 'hidden', elevation: 4 }}
+            onPress={() => {
+              setActiveCategory('Все');
+              setActiveCity('Все');
+              setScreenMode('category');
+            }}
+          >
+            {banner.bannerImage
+              ? <>
+                  <Image source={{ uri: banner.bannerImage }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
+                  <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                      <View style={{ backgroundColor: '#FF4500', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, alignSelf: 'flex-start', marginBottom: 4 }}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>⚡ РАСПРОДАЖА ДНЯ</Text>
+                      </View>
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{banner.storeName || 'Магазин'}</Text>
+                    </View>
+                    <View style={{ backgroundColor: '#FF4500', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Смотреть →</Text>
+                    </View>
+                  </View>
+                </>
+              : <View style={{ backgroundColor: '#FF4500', padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, alignSelf: 'flex-start', marginBottom: 4 }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>⚡ РАСПРОДАЖА ДНЯ</Text>
+                    </View>
+                    <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>{banner.storeName || 'Магазин'}</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Специальные скидки только сегодня!</Text>
+                  </View>
+                  <View style={{ backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}>
+                    <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>Смотреть</Text>
+                  </View>
+                </View>
+            }
+          </TouchableOpacity>
+        ))}
+
+        {/* Обычный баннер-слайдер */}
+        <View style={[styles.banner, { backgroundColor: BANNERS[bannerIndex].color, marginHorizontal: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bannerTitle}>{BANNERS[bannerIndex].title}</Text>
+            <Text style={styles.bannerSubtitle}>{BANNERS[bannerIndex].subtitle}</Text>
+            <TouchableOpacity style={styles.bannerBadge} onPress={() => { setActiveCategory('Все'); setScreenMode('category'); }}>
+              <Text style={{ color: '#FF4500', fontWeight: 'bold', fontSize: 13 }}>Смотреть все →</Text>
+            </TouchableOpacity>
           </View>
-        }
-      />
+          <Text style={{ fontSize: 64 }}>{BANNERS[bannerIndex].emoji}</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10, marginBottom: 16 }}>
+          {BANNERS.map((_, i) => (
+            <View key={i} style={{ width: i === bannerIndex ? 20 : 8, height: 8, borderRadius: 4, backgroundColor: i === bannerIndex ? '#FF4500' : '#ddd' }} />
+          ))}
+        </View>
+
+        <HappyHoursBanner />
+
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#222' }}>🔥 Горячие скидки</Text>
+          <TouchableOpacity onPress={() => { setActiveCategory('Все'); setScreenMode('category'); }}>
+            <Text style={{ color: '#FF4500', fontWeight: '600' }}>Смотреть все</Text>
+          </TouchableOpacity>
+        </View>
+
+        {sortedDeals.filter(d => !d.isHidden).filter(d => !userCity || userCity === 'Все' || d.city === userCity).slice(0, 3).map(deal => (
+          <DealCard key={deal.id} item={deal} user={user} onStorePress={setSelectedSellerId} userRole={userRole} />
+        ))}
+      </ScrollView>
     </View>
   );
 }

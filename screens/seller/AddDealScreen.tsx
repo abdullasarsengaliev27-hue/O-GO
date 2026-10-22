@@ -5,10 +5,10 @@ import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { User } from 'firebase/auth';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { styles } from '../../components/styles';
 import { AddressPickerModal } from '../../components/AddressPickerModal';
 import { uploadImage } from '../../utils/uploadImage';
-
 
 const CITY_COORDS: Record<string, { lat: number, lng: number }> = {
   'Алматы': { lat: 43.2220, lng: 76.8512 },
@@ -25,11 +25,17 @@ const SIZES_CLOTHING = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
 const SIZES_SHOES = ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46'];
 const COLORS = ['Черный', 'Белый', 'Серый', 'Красный', 'Синий', 'Зеленый', 'Желтый', 'Розовый', 'Коричневый', 'Бежевый'];
 const FOOD_TAGS = ['🥩 Халяль', '🥗 Вегетарианское', '🌾 Безглютеновое', '🌶 Острое', '👶 Детское меню', '🐟 Рыбное'];
-const BEAUTY_TAGS = ['💆 Для лица', '💇 Для волос', '🧴 Для тела', '✨ Универсальный', '🌿 Гипоаллергенный'];
 const GUARANTEE_OPTIONS = ['Без гарантии', '3 месяца', '6 месяцев', '1 год', '2 года'];
 const VOLUME_UNITS = ['мл', 'л', 'г', 'кг'];
+const CITIES = ['Алматы', 'Астана', 'Шымкент', 'Актау', 'Актобе', 'Атырау', 'Павлодар', 'Караганда'];
+const CATEGORIES = [
+  { id: 'clothing', label: 'Одежда и Обувь', emoji: '👕' },
+  { id: 'food', label: 'Еда и рестораны', emoji: '🍔' },
+  { id: 'tech', label: 'Техника и гаджеты', emoji: '💻' },
+  { id: 'beauty', label: 'Косметика и парфюм', emoji: '💄' },
+];
 
-export function AddDealScreen({ user, sellerCategory }: { user: User, sellerCategory?: string }) {
+export function AddDealScreen({ user }: { user: User }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [oldPrice, setOldPrice] = useState('');
@@ -37,55 +43,44 @@ export function AddDealScreen({ user, sellerCategory }: { user: User, sellerCate
   const [marketPrice, setMarketPrice] = useState('');
   const [store, setStore] = useState('');
   const [city, setCity] = useState('');
-  const [hasDelivery, setHasDelivery] = useState(false);
+  const [cat, setCat] = useState('clothing');
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [imageAspect, setImageAspect] = useState<[number, number]>([4, 5]);
+  const [hasDelivery, setHasDelivery] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+  const [exactAddress, setExactAddress] = useState('');
   const [dealLat, setDealLat] = useState<number | null>(null);
-const [dealLng, setDealLng] = useState<number | null>(null);
-const [showAddressPicker, setShowAddressPicker] = useState(false);
-const [exactAddress, setExactAddress] = useState('');
+  const [dealLng, setDealLng] = useState<number | null>(null);
+  const [showAddressPicker, setShowAddressPicker] = useState(false);
 
-  // 👕 Одежда/Обувь
+  // Одежда
+  const [clothingType, setClothingType] = useState<'clothing' | 'shoes'>('clothing');
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [outOfStockSizes, setOutOfStockSizes] = useState<string[]>([]);
   const [useColors, setUseColors] = useState(false);
-  const [colorVariants, setColorVariants] = useState<{ color: string, imageUri?: string, imageBase64?: string }[]>([]);
-  const [clothingType, setClothingType] = useState<'clothing' | 'shoes'>('clothing');
+  const [colorVariants, setColorVariants] = useState<{ color: string, imageUri?: string }[]>([]);
 
-  // 🍔 Еда
+  // Еда
   const [foodTags, setFoodTags] = useState<string[]>([]);
   const [menuItems, setMenuItems] = useState<{ name: string, price: string }[]>([]);
-  const [newMenuName, setNewMenuName] = useState('');
-  const [newMenuPrice, setNewMenuPrice] = useState('');
-  const [hasBooking, setHasBooking] = useState(false);
-  const [tableCount, setTableCount] = useState('');
   const [workingHours, setWorkingHours] = useState('');
   const [weight, setWeight] = useState('');
 
-  // �� Техника
+  // Техника
   const [specs, setSpecs] = useState('');
   const [guarantee, setGuarantee] = useState('Без гарантии');
   const [isNew, setIsNew] = useState(true);
-  const [techColors, setTechColors] = useState<{ color: string, imageUri?: string, imageBase64?: string }[]>([]);
+  const [techColors, setTechColors] = useState<{ color: string, imageUri?: string }[]>([]);
 
-  // 💄 Косметика
+  // Косметика
   const [volume, setVolume] = useState('');
   const [volumeUnit, setVolumeUnit] = useState('мл');
   const [expiryDate, setExpiryDate] = useState('');
-  const [beautyTags, setBeautyTags] = useState<string[]>([]);
   const [composition, setComposition] = useState('');
 
-  // 📦 Общее
-  const [width, setWidth] = useState('');
-  const [height, setHeight] = useState('');
-  const [depth, setDepth] = useState('');
-  const [material, setMaterial] = useState('');
-  const [stockCount, setStockCount] = useState('');
-
-  const discount = oldPrice && newPrice ? Math.round((1 - Number(newPrice) / Number(oldPrice)) * 100) : 0;
-  const cat = sellerCategory || 'general';
+  const discount = oldPrice && newPrice
+    ? Math.round((1 - Number(newPrice) / Number(oldPrice)) * 100)
+    : 0;
 
   const pickMainImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -94,7 +89,7 @@ const [exactAddress, setExactAddress] = useState('');
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: imageAspect,
-      quality: 0.7
+      quality: 0.7,
     });
     if (!result.canceled) setImageUri(result.assets[0].uri);
   };
@@ -102,60 +97,60 @@ const [exactAddress, setExactAddress] = useState('');
   const pickColorImage = async (color: string, istech = false) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.6 });
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 0.6,
+    });
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      const base64 = await new Promise<string>(resolve => { reader.onloadend = () => resolve(reader.result as string); reader.readAsDataURL(blob); });
-      if (istech) setTechColors(prev => prev.map(v => v.color === color ? { ...v, imageUri: uri, imageBase64: base64 } : v));
-      else setColorVariants(prev => prev.map(v => v.color === color ? { ...v, imageUri: uri, imageBase64: base64 } : v));
+      if (istech) setTechColors(prev => prev.map(v => v.color === color ? { ...v, imageUri: uri } : v));
+      else setColorVariants(prev => prev.map(v => v.color === color ? { ...v, imageUri: uri } : v));
     }
   };
 
-  const toggleSize = (size: string) => setSelectedSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size]);
-  const toggleColor = (color: string, istech = false) => {
-    if (istech) {
-      if (techColors.find(v => v.color === color)) setTechColors(prev => prev.filter(v => v.color !== color));
-      else setTechColors(prev => [...prev, { color }]);
-    } else {
-      if (colorVariants.find(v => v.color === color)) setColorVariants(prev => prev.filter(v => v.color !== color));
-      else setColorVariants(prev => [...prev, { color }]);
+  const handleSubmit = async () => {
+    if (!title || !oldPrice || !newPrice || !store || !city) {
+      return Alert.alert('Ошибка', 'Заполни все обязательные поля');
     }
-  };
-
-  const addMenuItem = () => {
-    if (!newMenuName || !newMenuPrice) return;
-    setMenuItems(prev => [...prev, { name: newMenuName, price: newMenuPrice }]);
-    setNewMenuName(''); setNewMenuPrice('');
-  };
-
-  const handleAdd = async () => {
-    if (!title || !oldPrice || !newPrice || !store || !city) return Alert.alert('Ошибка', 'Заполни все поля');
-    if (Number(newPrice) >= Number(oldPrice)) return Alert.alert('Ошибка', 'Новая цена должна быть меньше старой');
+    if (Number(newPrice) >= Number(oldPrice)) {
+      return Alert.alert('Ошибка', 'Новая цена должна быть меньше старой');
+    }
     setLoading(true);
     try {
       let imageUrl = null;
-if (imageUri) {
-  const response = await fetch(imageUri);
-  const blob = await response.blob();
-  const reader = new FileReader();
-  imageUrl = await new Promise(resolve => {
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.readAsDataURL(blob);
-  });
-}
+      if (imageUri) {
+        const resized = await ImageManipulator.manipulateAsync(
+          imageUri,
+          [{ resize: { width: imageAspect[0] === 16 ? 800 : 600, height: imageAspect[0] === 16 ? 450 : 750 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG }
+        );
+        const response = await fetch(resized.uri);
+        const blob = await response.blob();
+        const reader = new FileReader();
+        imageUrl = await new Promise(resolve => {
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      }
 
-      const baseData = {
-        title, description, oldPrice: Number(oldPrice), newPrice: Number(newPrice),
+      const cityCoords = CITY_COORDS[city] || CITY_COORDS['Алматы'];
+      const baseData: any = {
+        title, description,
+        oldPrice: Number(oldPrice),
+        newPrice: Number(newPrice),
         marketPrice: marketPrice ? Number(marketPrice) : null,
-        discount, store, city, imageUrl, hasDelivery,
-        category: cat, exactAddress,
-        lat: dealLat,
-        lng: dealLng,
-        sellerId: user.uid, sellerEmail: user.email,
+        discount, store, city, imageUrl,
+        imageAspect,
+        hasDelivery,
+        category: cat,
+        exactAddress,
+        lat: dealLat || (cityCoords.lat + (Math.random() - 0.5) * 0.018),
+        lng: dealLng || (cityCoords.lng + (Math.random() - 0.5) * 0.018),
+        sellerId: user.uid,
+        sellerEmail: user.email,
         createdAt: new Date().toISOString(),
+        viewCount: 0,
+        isBoosted: false,
       };
 
       const categoryData: any = {};
@@ -163,207 +158,218 @@ if (imageUri) {
         categoryData.sizes = selectedSizes;
         categoryData.outOfStockSizes = outOfStockSizes;
         categoryData.colorVariants = useColors ? colorVariants.map(v => ({ color: v.color, image: v.imageUri || null })) : [];
-        categoryData.colorVariants = techColors.map(v => ({ color: v.color, image: v.imageUri || null }));
-        } else if (cat === 'food') {
+        categoryData.clothingType = clothingType;
+      } else if (cat === 'food') {
         categoryData.foodTags = foodTags;
         categoryData.menuItems = menuItems;
-        categoryData.hasBooking = hasBooking;
-        categoryData.tableCount = hasBooking ? Number(tableCount) : null;
         categoryData.workingHours = workingHours;
         categoryData.weight = weight;
       } else if (cat === 'tech') {
         categoryData.specs = specs;
         categoryData.guarantee = guarantee;
         categoryData.isNew = isNew;
-        categoryData.colorVariants = techColors.map(v => ({ color: v.color, image: v.imageBase64 || null }));
+        categoryData.colorVariants = techColors.map(v => ({ color: v.color, image: v.imageUri || null }));
       } else if (cat === 'beauty') {
         categoryData.volume = volume;
         categoryData.volumeUnit = volumeUnit;
         categoryData.expiryDate = expiryDate;
-        categoryData.beautyTags = beautyTags;
         categoryData.composition = composition;
-      } else if (cat === 'general') {
-        categoryData.width = width;
-        categoryData.height = height;
-        categoryData.depth = depth;
-        categoryData.material = material;
-        categoryData.stockCount = stockCount ? Number(stockCount) : null;
       }
 
       await addDoc(collection(db, 'deals'), { ...baseData, ...categoryData });
-      Alert.alert('✅ Скидка добавлена!');
+      Alert.alert('✅ Скидка добавлена!', 'Ваша скидка опубликована');
       setTitle(''); setDescription(''); setOldPrice(''); setNewPrice('');
       setMarketPrice(''); setStore(''); setCity(''); setImageUri(null);
-    } catch (e: any) { Alert.alert('Ошибка', e.message); }
+      setSelectedSizes([]); setFoodTags([]); setMenuItems([]);
+    } catch (e: any) {
+      Alert.alert('Ошибка', e.message);
+    }
     setLoading(false);
   };
 
-  const categoryInfo: Record<string, { emoji: string, label: string, placeholder: string }> = {
-    clothing: { emoji: '👕', label: 'Одежда и Обувь', placeholder: 'Nike Air Max 90' },
-    food: { emoji: '🍔', label: 'Еда и рестораны', placeholder: 'Донер Классический с говядиной' },
-    tech: { emoji: '💻', label: 'Техника и гаджеты', placeholder: 'Samsung Galaxy S24' },
-    beauty: { emoji: '💄', label: 'Косметика', placeholder: 'Туалетная вода Dior Sauvage' },
-    general: { emoji: '📦', label: 'Магазин', placeholder: 'Название товара' },
-  };
-
-  const info = categoryInfo[cat] || categoryInfo.general;
-
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} contentContainerStyle={{ padding: 20 }}>
+    <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} contentContainerStyle={{ padding: 16 }}>
+      <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#222', marginBottom: 16 }}>➕ Добавить скидку</Text>
 
-      {/* Заголовок с нишей */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-        <View style={{ backgroundColor: '#FF4500', borderRadius: 12, width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 24 }}>{info.emoji}</Text>
-        </View>
-        <View>
-          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222' }}>Добавить скидку</Text>
-          <Text style={{ color: '#FF4500', fontSize: 13 }}>{info.label}</Text>
+      {/* Категория */}
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+        <Text style={styles.label}>Категория *</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {CATEGORIES.map(c => (
+            <TouchableOpacity
+              key={c.id}
+              onPress={() => setCat(c.id)}
+              style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: cat === c.id ? '#FF4500' : '#f0f0f0' }}
+            >
+              <Text style={{ color: cat === c.id ? '#fff' : '#555', fontWeight: '600' }}>{c.emoji} {c.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
-{/* Выбор формата фото */}
-<View style={{ marginBottom: 12 }}>
-  <Text style={{ fontWeight: '700', color: '#333', marginBottom: 8, fontSize: 13 }}>📐 Формат фото:</Text>
-  <View style={{ flexDirection: 'row', gap: 10 }}>
-    <TouchableOpacity
-      onPress={() => setImageAspect([4, 5])}
-      style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: imageAspect[0] === 4 ? '#FF4500' : '#f5f5f5', alignItems: 'center', borderWidth: 2, borderColor: imageAspect[0] === 4 ? '#FF4500' : 'transparent' }}
-    >
-      <Text style={{ fontSize: 20 }}>📱</Text>
-      <Text style={{ color: imageAspect[0] === 4 ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>4:5</Text>
-      <Text style={{ color: imageAspect[0] === 4 ? 'rgba(255,255,255,0.8)' : '#999', fontSize: 11 }}>Вертикальный</Text>
-    </TouchableOpacity>
-    <TouchableOpacity
-      onPress={() => setImageAspect([16, 9])}
-      style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: imageAspect[0] === 16 ? '#FF4500' : '#f5f5f5', alignItems: 'center', borderWidth: 2, borderColor: imageAspect[0] === 16 ? '#FF4500' : 'transparent' }}
-    >
-      <Text style={{ fontSize: 20 }}>🖥</Text>
-      <Text style={{ color: imageAspect[0] === 16 ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>16:9</Text>
-      <Text style={{ color: imageAspect[0] === 16 ? 'rgba(255,255,255,0.8)' : '#999', fontSize: 11 }}>Горизонтальный</Text>
-    </TouchableOpacity>
-  </View>
-</View>
+      {/* Основная инфо */}
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+        <Text style={styles.label}>Название товара *</Text>
+        <TextInput style={styles.input} placeholder="Название скидки" value={title} onChangeText={setTitle} placeholderTextColor="#aaa" />
+
+        <Text style={styles.label}>Описание</Text>
+        <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} placeholder="Описание товара" value={description} onChangeText={setDescription} multiline placeholderTextColor="#aaa" />
+
+        <Text style={styles.label}>Магазин *</Text>
+        <TextInput style={styles.input} placeholder="Название магазина" value={store} onChangeText={setStore} placeholderTextColor="#aaa" />
+      </View>
+
+      {/* Цены */}
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+        <Text style={styles.label}>Старая цена (₸) *</Text>
+        <TextInput style={styles.input} placeholder="10000" value={oldPrice} onChangeText={setOldPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
+
+        <Text style={styles.label}>Новая цена (₸) *</Text>
+        <TextInput style={styles.input} placeholder="7000" value={newPrice} onChangeText={setNewPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
+
+        <Text style={styles.label}>Рыночная цена (₸) — для сравнения</Text>
+        <TextInput style={styles.input} placeholder="15000" value={marketPrice} onChangeText={setMarketPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
+
+        {discount > 0 && (
+          <View style={{ backgroundColor: '#FFF0EB', borderRadius: 10, padding: 10, alignItems: 'center' }}>
+            <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 18 }}>Скидка: -{discount}%</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Город */}
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+        <Text style={styles.label}>Город *</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          {CITIES.map(c => (
+            <TouchableOpacity key={c} onPress={() => setCity(c)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: city === c ? '#FF4500' : '#f0f0f0' }}>
+              <Text style={{ color: city === c ? '#fff' : '#555', fontWeight: '600' }}>{c}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          onPress={() => setShowAddressPicker(true)}
+          style={{ backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}
+        >
+          <Ionicons name="location" size={20} color="#FF4500" />
+          <Text style={{ color: '#FF4500', fontWeight: '600', flex: 1 }} numberOfLines={1}>
+            {exactAddress || 'Указать точный адрес на карте'}
+          </Text>
+          {exactAddress && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
+        </TouchableOpacity>
+      </View>
 
       {/* Фото */}
-      <TouchableOpacity onPress={pickMainImage} style={styles.imagePicker}>
-        {imageUri
-          ? <Image source={{ uri: imageUri }} style={{ width: '100%', height: imageAspect[0] === 16 ? 180 : 240, borderRadius: 12 }} resizeMode="cover" />
-          : <View style={{ alignItems: 'center' }}><Ionicons name="camera" size={40} color="#FF4500" /><Text style={{ color: '#FF4500', fontWeight: '600', marginTop: 8 }}>Добавить фото</Text></View>
-        }
-      </TouchableOpacity>
-
-      {/* Общие поля */}
-      <Text style={styles.label}>Название *</Text>
-      <TextInput style={styles.input} placeholder={info.placeholder} value={title} onChangeText={setTitle} placeholderTextColor="#aaa" />
-
-      <Text style={styles.label}>Описание</Text>
-      <TextInput style={[styles.input, { height: 80 }]} placeholder="Подробное описание..." value={description} onChangeText={setDescription} multiline placeholderTextColor="#aaa" />
-
-      <Text style={styles.label}>Старая цена (₸) *</Text>
-      <TextInput style={styles.input} placeholder="45000" value={oldPrice} onChangeText={setOldPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
-
-      <Text style={styles.label}>Новая цена (₸) *</Text>
-      <TextInput style={styles.input} placeholder="27000" value={newPrice} onChangeText={setNewPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
-
-      {discount > 0 && (
-        <View style={{ backgroundColor: '#FF4500', borderRadius: 10, padding: 10, marginBottom: 14, alignItems: 'center' }}>
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Скидка: -{discount}% 🔥</Text>
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+        <Text style={styles.label}>Формат фото</Text>
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+          <TouchableOpacity
+            onPress={() => setImageAspect([4, 5])}
+            style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: imageAspect[0] === 4 ? '#FF4500' : '#f5f5f5', alignItems: 'center', borderWidth: 2, borderColor: imageAspect[0] === 4 ? '#FF4500' : 'transparent' }}
+          >
+            <Text style={{ fontSize: 20 }}>📱</Text>
+            <Text style={{ color: imageAspect[0] === 4 ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>4:5</Text>
+            <Text style={{ color: imageAspect[0] === 4 ? 'rgba(255,255,255,0.8)' : '#999', fontSize: 11 }}>Вертикальный</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setImageAspect([16, 9])}
+            style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: imageAspect[0] === 16 ? '#FF4500' : '#f5f5f5', alignItems: 'center', borderWidth: 2, borderColor: imageAspect[0] === 16 ? '#FF4500' : 'transparent' }}
+          >
+            <Text style={{ fontSize: 20 }}>🖥</Text>
+            <Text style={{ color: imageAspect[0] === 16 ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>16:9</Text>
+            <Text style={{ color: imageAspect[0] === 16 ? 'rgba(255,255,255,0.8)' : '#999', fontSize: 11 }}>Горизонтальный</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      <View style={{ backgroundColor: '#FFF9E6', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#FFD700' }}>
-        <Text style={{ fontWeight: 'bold', color: '#333', marginBottom: 6 }}>💡 Цена у конкурентов (₸)</Text>
-        <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="65000" value={marketPrice} onChangeText={setMarketPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
+        <Text style={styles.label}>Фото товара</Text>
+        <TouchableOpacity onPress={pickMainImage} style={styles.imagePicker}>
+          {imageUri
+            ? <Image source={{ uri: imageUri }} style={{ width: '100%', height: imageAspect[0] === 16 ? 180 : 240, borderRadius: 12 }} resizeMode="cover" />
+            : <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+                <Ionicons name="camera" size={40} color="#FF4500" />
+                <Text style={{ color: '#FF4500', fontWeight: '600', marginTop: 8 }}>Добавить фото</Text>
+              </View>
+          }
+        </TouchableOpacity>
       </View>
 
-      <Text style={styles.label}>Магазин / Заведение *</Text>
-      <TextInput style={styles.input} placeholder="Название" value={store} onChangeText={setStore} placeholderTextColor="#aaa" />
+      {/* Доставка */}
+      <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View>
+          <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>🚚 Есть доставка</Text>
+          <Text style={{ color: '#999', fontSize: 12 }}>Покупатели смогут заказать</Text>
+        </View>
+        <Switch value={hasDelivery} onValueChange={setHasDelivery} trackColor={{ true: '#FF4500' }} />
+      </View>
 
-      <Text style={styles.label}>Город *</Text>
-      <TextInput style={styles.input} placeholder="Алматы" value={city} onChangeText={setCity} placeholderTextColor="#aaa" />
-      {/* Точный адрес */}
-<Text style={styles.label}>📍 Точный адрес магазина</Text>
-{exactAddress ? (
-  <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 12, marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
-    <View style={{ flex: 1 }}>
-      <Text style={{ color: '#4CAF50', fontWeight: 'bold', fontSize: 13 }} numberOfLines={2}>{exactAddress}</Text>
-      {dealLat && <Text style={{ color: '#999', fontSize: 11, marginTop: 2 }}>📌 {dealLat.toFixed(4)}, {dealLng?.toFixed(4)}</Text>}
-    </View>
-    <TouchableOpacity onPress={() => setShowAddressPicker(true)} style={{ marginLeft: 10 }}>
-      <Text style={{ color: '#FF4500', fontSize: 13 }}>Изменить</Text>
-    </TouchableOpacity>
-  </View>
-) : (
-  <TouchableOpacity
-    onPress={() => { if (!city) return Alert.alert('Сначала выбери город'); setShowAddressPicker(true); }}
-    style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 14, borderWidth: 2, borderColor: '#FF4500', borderStyle: 'dashed', alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
-  >
-    <Ionicons name="location" size={20} color="#FF4500" />
-    <Text style={{ color: '#FF4500', fontWeight: '600' }}>Указать точный адрес на карте</Text>
-  </TouchableOpacity>
-)}
-
-<AddressPickerModal
-  visible={showAddressPicker}
-  city={city || 'Алматы'}
-  onConfirm={(address, lat, lng) => {
-    setExactAddress(address);
-    setDealLat(lat);
-    setDealLng(lng);
-  }}
-  onClose={() => setShowAddressPicker(false)}
-/>
-
-      {/* ====== 👕 ОДЕЖДА/ОБУВЬ ====== */}
+      {/* ====== ОДЕЖДА ====== */}
       {cat === 'clothing' && (
         <>
-          {/* Тип */}
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>Тип товара</Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity onPress={() => setClothingType('clothing')} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: clothingType === 'clothing' ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
-                <Text style={{ color: clothingType === 'clothing' ? '#fff' : '#333', fontWeight: '600' }}>👕 Одежда</Text>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+            <Text style={styles.label}>Тип</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+              <TouchableOpacity onPress={() => setClothingType('clothing')} style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: clothingType === 'clothing' ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
+                <Text style={{ color: clothingType === 'clothing' ? '#fff' : '#555', fontWeight: '600' }}>👕 Одежда</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setClothingType('shoes')} style={{ flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: clothingType === 'shoes' ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
-                <Text style={{ color: clothingType === 'shoes' ? '#fff' : '#333', fontWeight: '600' }}>👟 Обувь</Text>
+              <TouchableOpacity onPress={() => setClothingType('shoes')} style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: clothingType === 'shoes' ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
+                <Text style={{ color: clothingType === 'shoes' ? '#fff' : '#555', fontWeight: '600' }}>👟 Обувь</Text>
               </TouchableOpacity>
             </View>
-          </View>
 
-          {/* Размеры */}
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>📏 Доступные размеры</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {(clothingType === 'clothing' ? SIZES_CLOTHING : SIZES_SHOES).map(size => {
-                const sel = selectedSizes.includes(size);
-                const oos = outOfStockSizes.includes(size);
-                return (
-                  <TouchableOpacity key={size}
-                    onPress={() => toggleSize(size)}
-                    onLongPress={() => sel && setOutOfStockSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size])}
-                    style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: sel ? (oos ? '#999' : '#FF4500') : '#f0f0f0' }}
-                  >
-                    <Text style={{ color: sel ? '#fff' : '#666', fontWeight: '600' }}>{size}{oos ? ' ✗' : ''}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <Text style={styles.label}>Размеры</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {(clothingType === 'clothing' ? SIZES_CLOTHING : SIZES_SHOES).map(size => (
+                <TouchableOpacity
+                  key={size}
+                  onPress={() => {
+                    if (selectedSizes.includes(size)) setSelectedSizes(prev => prev.filter(s => s !== size));
+                    else setSelectedSizes(prev => [...prev, size]);
+                  }}
+                  style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: selectedSizes.includes(size) ? '#FF4500' : '#f0f0f0', opacity: outOfStockSizes.includes(size) ? 0.5 : 1 }}
+                >
+                  <Text style={{ color: selectedSizes.includes(size) ? '#fff' : '#555', fontWeight: '600' }}>{size}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
-            {selectedSizes.length > 0 && <Text style={{ color: '#aaa', fontSize: 11, marginTop: 8 }}>💡 Зажми размер → пометить "нет в наличии"</Text>}
-          </View>
 
-          {/* Цвета */}
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
+            <Text style={styles.label}>Нет в наличии</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {selectedSizes.map(size => (
+                <TouchableOpacity
+                  key={size}
+                  onPress={() => {
+                    if (outOfStockSizes.includes(size)) setOutOfStockSizes(prev => prev.filter(s => s !== size));
+                    else setOutOfStockSizes(prev => [...prev, size]);
+                  }}
+                  style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: outOfStockSizes.includes(size) ? '#999' : '#f0f0f0' }}
+                >
+                  <Text style={{ color: outOfStockSizes.includes(size) ? '#fff' : '#555', fontWeight: '600' }}>{size}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15 }}>🎨 Цвета с фото</Text>
-              <Switch value={useColors} onValueChange={setUseColors} trackColor={{ false: '#ddd', true: '#FF4500' }} thumbColor="#fff" />
+              <Text style={styles.label}>Варианты цветов</Text>
+              <Switch value={useColors} onValueChange={setUseColors} trackColor={{ true: '#FF4500' }} />
             </View>
+
             {useColors && (
               <>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
                   {COLORS.map(color => (
-                    <TouchableOpacity key={color} onPress={() => toggleColor(color)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: colorVariants.find(v => v.color === color) ? '#FF4500' : '#f0f0f0' }}>
-                      <Text style={{ color: colorVariants.find(v => v.color === color) ? '#fff' : '#666', fontWeight: '600' }}>{color}</Text>
+                    <TouchableOpacity
+                      key={color}
+                      onPress={() => {
+                        if (colorVariants.find(v => v.color === color)) {
+                          setColorVariants(prev => prev.filter(v => v.color !== color));
+                        } else {
+                          setColorVariants(prev => [...prev, { color }]);
+                        }
+                      }}
+                      style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: colorVariants.find(v => v.color === color) ? '#FF4500' : '#f0f0f0' }}
+                    >
+                      <Text style={{ color: colorVariants.find(v => v.color === color) ? '#fff' : '#555', fontSize: 13 }}>{color}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -384,92 +390,86 @@ if (imageUri) {
         </>
       )}
 
-      {/* ====== 🍔 ЕДА ====== */}
+      {/* ====== ЕДА ====== */}
       {cat === 'food' && (
         <>
-          <Text style={styles.label}>Вес/Объём блюда</Text>
-          <TextInput style={styles.input} placeholder="350г / 500мл" value={weight} onChangeText={setWeight} placeholderTextColor="#aaa" />
-
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>🏷 Особые отметки</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+            <Text style={styles.label}>Теги еды</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
               {FOOD_TAGS.map(tag => (
-                <TouchableOpacity key={tag} onPress={() => setFoodTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: foodTags.includes(tag) ? '#FF4500' : '#f0f0f0' }}>
-                  <Text style={{ color: foodTags.includes(tag) ? '#fff' : '#333', fontWeight: '600', fontSize: 13 }}>{tag}</Text>
+                <TouchableOpacity
+                  key={tag}
+                  onPress={() => {
+                    if (foodTags.includes(tag)) setFoodTags(prev => prev.filter(t => t !== tag));
+                    else setFoodTags(prev => [...prev, tag]);
+                  }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: foodTags.includes(tag) ? '#FF4500' : '#f0f0f0' }}
+                >
+                  <Text style={{ color: foodTags.includes(tag) ? '#fff' : '#555', fontSize: 13 }}>{tag}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
 
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 4 }}>📋 Меню заведения</Text>
-            <Text style={{ color: '#999', fontSize: 12, marginBottom: 10 }}>Добавь блюда — покупатель увидит весь ассортимент</Text>
+            <Text style={styles.label}>Вес/Объём</Text>
+            <TextInput style={styles.input} placeholder="300г" value={weight} onChangeText={setWeight} placeholderTextColor="#aaa" />
+
+            <Text style={styles.label}>Часы работы</Text>
+            <TextInput style={styles.input} placeholder="10:00 - 22:00" value={workingHours} onChangeText={setWorkingHours} placeholderTextColor="#aaa" />
+
+            <Text style={styles.label}>Меню</Text>
             {menuItems.map((item, i) => (
-              <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
-                <Text style={{ color: '#222', flex: 1 }}>{item.name}</Text>
-                <Text style={{ color: '#FF4500', fontWeight: 'bold', marginRight: 10 }}>{Number(item.price).toLocaleString()} ₸</Text>
-                <TouchableOpacity onPress={() => setMenuItems(prev => prev.filter((_, idx) => idx !== i))}><Ionicons name="close-circle" size={20} color="#FF4500" /></TouchableOpacity>
+              <View key={i} style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+                <TextInput style={[styles.input, { flex: 2, marginBottom: 0 }]} placeholder="Название" value={item.name} onChangeText={v => setMenuItems(prev => prev.map((m, j) => j === i ? { ...m, name: v } : m))} placeholderTextColor="#aaa" />
+                <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Цена" value={item.price} onChangeText={v => setMenuItems(prev => prev.map((m, j) => j === i ? { ...m, price: v } : m))} keyboardType="numeric" placeholderTextColor="#aaa" />
+                <TouchableOpacity onPress={() => setMenuItems(prev => prev.filter((_, j) => j !== i))} style={{ justifyContent: 'center', padding: 8 }}>
+                  <Ionicons name="trash-outline" size={20} color="#f44336" />
+                </TouchableOpacity>
               </View>
             ))}
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <TextInput style={[styles.input, { flex: 2, marginBottom: 0 }]} placeholder="Название блюда" value={newMenuName} onChangeText={setNewMenuName} placeholderTextColor="#aaa" />
-              <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="Цена" value={newMenuPrice} onChangeText={setNewMenuPrice} keyboardType="numeric" placeholderTextColor="#aaa" />
-              <TouchableOpacity onPress={addMenuItem} style={{ backgroundColor: '#FF4500', borderRadius: 12, width: 44, height: 48, justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="add" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15 }}>🗓 Бронирование столиков</Text>
-              <Switch value={hasBooking} onValueChange={setHasBooking} trackColor={{ false: '#ddd', true: '#FF4500' }} thumbColor="#fff" />
-            </View>
-            {hasBooking && (
-              <>
-                <TextInput style={styles.input} placeholder="Кол-во столиков (10)" value={tableCount} onChangeText={setTableCount} keyboardType="numeric" placeholderTextColor="#aaa" />
-                <TextInput style={styles.input} placeholder="Часы работы (10:00 - 22:00)" value={workingHours} onChangeText={setWorkingHours} placeholderTextColor="#aaa" />
-              </>
-            )}
+            <TouchableOpacity onPress={() => setMenuItems(prev => [...prev, { name: '', price: '' }])} style={{ backgroundColor: '#FFF0EB', borderRadius: 10, padding: 10, alignItems: 'center', marginTop: 4 }}>
+              <Text style={{ color: '#FF4500', fontWeight: '600' }}>+ Добавить позицию</Text>
+            </TouchableOpacity>
           </View>
         </>
       )}
 
-      {/* ====== 💻 ТЕХНИКА ====== */}
+      {/* ====== ТЕХНИКА ====== */}
       {cat === 'tech' && (
         <>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>📊 Состояние товара</Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
-              <TouchableOpacity onPress={() => setIsNew(true)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: isNew ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
-                <Text style={{ color: isNew ? '#fff' : '#333', fontWeight: '600' }}>✨ Новый</Text>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+              <TouchableOpacity onPress={() => setIsNew(true)} style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: isNew ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
+                <Text style={{ color: isNew ? '#fff' : '#555', fontWeight: '600' }}>✨ Новый</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setIsNew(false)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: !isNew ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
-                <Text style={{ color: !isNew ? '#fff' : '#333', fontWeight: '600' }}>🔄 Б/У</Text>
+              <TouchableOpacity onPress={() => setIsNew(false)} style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: !isNew ? '#FF4500' : '#f0f0f0', alignItems: 'center' }}>
+                <Text style={{ color: !isNew ? '#fff' : '#555', fontWeight: '600' }}>♻️ Б/У</Text>
               </TouchableOpacity>
             </View>
-          </View>
 
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>🛡 Гарантия</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <Text style={styles.label}>Характеристики</Text>
+            <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} placeholder="RAM: 8GB, Экран: 6.5" value={specs} onChangeText={setSpecs} multiline placeholderTextColor="#aaa" />
+
+            <Text style={styles.label}>Гарантия</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
               {GUARANTEE_OPTIONS.map(g => (
-                <TouchableOpacity key={g} onPress={() => setGuarantee(g)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: guarantee === g ? '#FF4500' : '#f0f0f0' }}>
-                  <Text style={{ color: guarantee === g ? '#fff' : '#333', fontWeight: '600' }}>{g}</Text>
+                <TouchableOpacity key={g} onPress={() => setGuarantee(g)} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: guarantee === g ? '#FF4500' : '#f0f0f0' }}>
+                  <Text style={{ color: guarantee === g ? '#fff' : '#555', fontWeight: '600' }}>{g}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
 
-          <Text style={styles.label}>⚙️ Характеристики</Text>
-          <TextInput style={[styles.input, { height: 100 }]} placeholder={'Память: 256 ГБ\nОЗУ: 8 ГБ\nКамера: 50 МП'} value={specs} onChangeText={setSpecs} multiline placeholderTextColor="#aaa" />
-
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 8 }}>🎨 Цвета</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-              {COLORS.map(color => (
-                <TouchableOpacity key={color} onPress={() => toggleColor(color, true)} style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, backgroundColor: techColors.find(v => v.color === color) ? '#FF4500' : '#f0f0f0' }}>
-                  <Text style={{ color: techColors.find(v => v.color === color) ? '#fff' : '#666', fontWeight: '600' }}>{color}</Text>
+            <Text style={styles.label}>Цвета</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              {COLORS.slice(0, 6).map(color => (
+                <TouchableOpacity
+                  key={color}
+                  onPress={() => {
+                    if (techColors.find(v => v.color === color)) setTechColors(prev => prev.filter(v => v.color !== color));
+                    else setTechColors(prev => [...prev, { color }]);
+                  }}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: techColors.find(v => v.color === color) ? '#FF4500' : '#f0f0f0' }}
+                >
+                  <Text style={{ color: techColors.find(v => v.color === color) ? '#fff' : '#555', fontSize: 13 }}>{color}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -485,86 +485,52 @@ if (imageUri) {
         </>
       )}
 
-      {/* ====== 💄 КОСМЕТИКА ====== */}
+      {/* ====== КОСМЕТИКА ====== */}
       {cat === 'beauty' && (
         <>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>📦 Объём / Вес</Text>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
+            <Text style={styles.label}>Объём/Вес</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
               <TextInput style={[styles.input, { flex: 1, marginBottom: 0 }]} placeholder="100" value={volume} onChangeText={setVolume} keyboardType="numeric" placeholderTextColor="#aaa" />
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 {VOLUME_UNITS.map(u => (
-                  <TouchableOpacity key={u} onPress={() => setVolumeUnit(u)} style={{ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: volumeUnit === u ? '#FF4500' : '#f0f0f0', justifyContent: 'center' }}>
-                    <Text style={{ color: volumeUnit === u ? '#fff' : '#333', fontWeight: '600' }}>{u}</Text>
+                  <TouchableOpacity key={u} onPress={() => setVolumeUnit(u)} style={{ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: volumeUnit === u ? '#FF4500' : '#f0f0f0' }}>
+                    <Text style={{ color: volumeUnit === u ? '#fff' : '#555', fontWeight: '600' }}>{u}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
+
+            <Text style={styles.label}>Срок годности</Text>
+            <TextInput style={styles.input} placeholder="12/2026" value={expiryDate} onChangeText={setExpiryDate} placeholderTextColor="#aaa" />
+
+            <Text style={styles.label}>Состав</Text>
+            <TextInput style={[styles.input, { height: 80, textAlignVertical: 'top' }]} placeholder="Основные компоненты..." value={composition} onChangeText={setComposition} multiline placeholderTextColor="#aaa" />
           </View>
-
-          <Text style={styles.label}>📅 Срок годности *</Text>
-          <TextInput style={styles.input} placeholder="12/2026" value={expiryDate} onChangeText={setExpiryDate} placeholderTextColor="#aaa" />
-
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>🏷 Теги</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              {BEAUTY_TAGS.map(tag => (
-                <TouchableOpacity key={tag} onPress={() => setBeautyTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag])} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: beautyTags.includes(tag) ? '#FF4500' : '#f0f0f0' }}>
-                  <Text style={{ color: beautyTags.includes(tag) ? '#fff' : '#333', fontWeight: '600', fontSize: 13 }}>{tag}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          <Text style={styles.label}>🧪 Состав</Text>
-          <TextInput style={[styles.input, { height: 80 }]} placeholder="Aqua, Glycerin, Niacinamide..." value={composition} onChangeText={setComposition} multiline placeholderTextColor="#aaa" />
         </>
       )}
 
-      {/* ====== 📦 ОБЩЕЕ ====== */}
-      {cat === 'general' && (
-        <>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-            <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 10 }}>📐 Габариты (см)</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#999', fontSize: 12, marginBottom: 4 }}>Ширина</Text>
-                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="30" value={width} onChangeText={setWidth} keyboardType="numeric" placeholderTextColor="#aaa" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#999', fontSize: 12, marginBottom: 4 }}>Высота</Text>
-                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="40" value={height} onChangeText={setHeight} keyboardType="numeric" placeholderTextColor="#aaa" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: '#999', fontSize: 12, marginBottom: 4 }}>Глубина</Text>
-                <TextInput style={[styles.input, { marginBottom: 0 }]} placeholder="20" value={depth} onChangeText={setDepth} keyboardType="numeric" placeholderTextColor="#aaa" />
-              </View>
-            </View>
-          </View>
-
-          <Text style={styles.label}>🪵 Материал</Text>
-          <TextInput style={styles.input} placeholder="Дерево, Керамика, Нержавеющая сталь..." value={material} onChangeText={setMaterial} placeholderTextColor="#aaa" />
-
-          <Text style={styles.label}>📦 Количество в наличии</Text>
-          <TextInput style={styles.input} placeholder="50" value={stockCount} onChangeText={setStockCount} keyboardType="numeric" placeholderTextColor="#aaa" />
-        </>
-      )}
-
-      {/* Доставка */}
-      <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15 }}>🚚 Есть доставка</Text>
-          <Text style={{ color: '#999', fontSize: 13 }}>Заказы онлайн</Text>
-        </View>
-        <Switch value={hasDelivery} onValueChange={setHasDelivery} trackColor={{ false: '#ddd', true: '#FF4500' }} thumbColor="#fff" />
-      </View>
-
+      {/* Кнопка */}
       {loading
-        ? <ActivityIndicator size="large" color="#FF4500" />
-        : <TouchableOpacity style={styles.bigBtn} onPress={handleAdd}>
-            <Text style={styles.bigBtnText}>Опубликовать скидку 🚀</Text>
+        ? <ActivityIndicator size="large" color="#FF4500" style={{ marginTop: 16 }} />
+        : <TouchableOpacity style={styles.bigBtn} onPress={handleSubmit}>
+            <Text style={styles.bigBtnText}>🚀 Опубликовать скидку</Text>
           </TouchableOpacity>
       }
+
+      <View style={{ height: 40 }} />
+
+      <AddressPickerModal
+        visible={showAddressPicker}
+        onClose={() => setShowAddressPicker(false)}
+        onSelect={(address, lat, lng) => {
+          setExactAddress(address);
+          setDealLat(lat);
+          setDealLng(lng);
+          setShowAddressPicker(false);
+        }}
+        city={city}
+      />
     </ScrollView>
   );
 }

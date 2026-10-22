@@ -21,13 +21,12 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [allDeals, setAllDeals] = useState<any[]>([]);
   const [allOrders, setAllOrders] = useState<any[]>([]);
+  const [allSupport, setAllSupport] = useState<any[]>([]);
   const [filter, setFilter] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [newPassword, setNewPassword] = useState('');
-  const [allSupport, setAllSupport] = useState<any[]>([]);
-  
 
   useEffect(() => {
     const unsubs: any[] = [];
@@ -98,26 +97,23 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   };
 
   const approvePromotion = async (p: any) => {
-    console.log('=== APPROVE PROMOTION ===');
-    console.log('type:', p.type);
-    console.log('dealId:', p.dealId);
-    console.log('sellerId:', p.sellerId);
-    console.log('planId:', p.planId);
-    
-    const hours = p.planId?.includes('24h') ? 24 : p.planId?.includes('3d') ? 72 : 168;
-    console.log('hours calculated:', hours);
-    const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
-    console.log('expiresAt:', expiresAt);
-
-    console.log('Approving:', p.type, p.dealId, p.sellerId, p.planId);
-    console.log('Hours:', hours);
     try {
-      await updateDoc(doc(db, 'promotions', p.id), {
+      // Вычисляем время истечения
+      let hours = 24;
+      if (p.planId?.includes('3d')) hours = 72;
+      else if (p.planId?.includes('7d')) hours = 168;
+      else if (p.planId?.includes('24h')) hours = 24;
+
+      const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+
+      // 1. Обновляем статус продвижения
+      await setDoc(doc(db, 'promotions', p.id), {
         status: 'approved',
         expiresAt,
         approvedAt: new Date().toISOString(),
-      });
-  
+      }, { merge: true });
+
+      // 2. Турбо-буст — поднимаем скидки в топ
       if (p.type === 'turbo') {
         if (p.dealId) {
           await setDoc(doc(db, 'deals', p.dealId), {
@@ -125,7 +121,10 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
             boostedUntil: expiresAt,
           }, { merge: true });
         } else {
-          const dealsSnap = await getDocs(query(collection(db, 'deals'), where('sellerId', '==', p.sellerId)));
+          // Поднимаем все скидки продавца
+          const dealsSnap = await getDocs(
+            query(collection(db, 'deals'), where('sellerId', '==', p.sellerId))
+          );
           for (const d of dealsSnap.docs) {
             await setDoc(doc(db, 'deals', d.id), {
               isBoosted: true,
@@ -133,26 +132,49 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
             }, { merge: true });
           }
         }
-        }
-  
+      }
+
+      // 3. Выделение на карте
       if (p.type === 'map') {
-        await setDoc(doc(db, 'users', p.sellerId), {
-          mapHighlighted: true,
-          mapHighlightedUntil: expiresAt,
-        }, { merge: true });
+        const sellerSnap = await getDocs(
+          query(collection(db, 'users'), where('email', '==', p.sellerEmail))
+        );
+        if (!sellerSnap.empty) {
+          await setDoc(doc(db, 'users', sellerSnap.docs[0].id), {
+            mapHighlighted: true,
+            mapHighlightedUntil: expiresAt,
+          }, { merge: true });
+        } else if (p.sellerId) {
+          await setDoc(doc(db, 'users', p.sellerId), {
+            mapHighlighted: true,
+            mapHighlightedUntil: expiresAt,
+          }, { merge: true });
+        }
       }
-      
+
+      // 4. Баннер на главной
       if (p.type === 'banner') {
-        await setDoc(doc(db, 'users', p.sellerId), {
-          hasBanner: true,
-          bannerUntil: expiresAt,
-          bannerImage: p.bannerImage || null,
-        }, { merge: true });
+        const sellerSnap = await getDocs(
+          query(collection(db, 'users'), where('email', '==', p.sellerEmail))
+        );
+        if (!sellerSnap.empty) {
+          await setDoc(doc(db, 'users', sellerSnap.docs[0].id), {
+            hasBanner: true,
+            bannerUntil: expiresAt,
+            bannerImage: p.bannerImage || null,
+          }, { merge: true });
+        } else if (p.sellerId) {
+          await setDoc(doc(db, 'users', p.sellerId), {
+            hasBanner: true,
+            bannerUntil: expiresAt,
+            bannerImage: p.bannerImage || null,
+          }, { merge: true });
+        }
       }
-  
-      Alert.alert('✅ Активировано!', `${p.promoTitle} на ${p.planLabel}`);
+
+      Alert.alert('✅ Продвижение активировано!', `${p.promoTitle}\nДействует до: ${new Date(expiresAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`);
     } catch (e: any) {
-      Alert.alert('Ошибка', e.message);
+      Alert.alert('Ошибка при активации', e.message);
     }
   };
 
@@ -233,7 +255,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      {/* Шапка */}
       <View style={{ backgroundColor: '#222', paddingTop: 16, paddingBottom: 16, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center' }}>
         <TouchableOpacity onPress={onBack}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -246,7 +267,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         )}
       </View>
 
-      {/* Вкладки */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: '#222', paddingBottom: 12 }} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
         {[
           { id: 'dashboard', label: '📊 Дашборд' },
@@ -266,7 +286,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         ))}
       </ScrollView>
 
-      {/* Дашборд */}
       {activeTab === 'dashboard' && (
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Text style={{ fontSize: 20, fontWeight: '800', color: '#1a1a1a', marginBottom: 16 }}>📊 Общая статистика</Text>
@@ -300,8 +319,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
               <Text style={{ color: '#999', fontSize: 12, marginTop: 4 }}>Новых заявок</Text>
             </View>
           </View>
-
-          {/* Уведомления о новых заявках */}
           {pendingCount > 0 && (
             <TouchableOpacity onPress={() => setActiveTab('sellers')} style={{ backgroundColor: '#FFF9E6', borderRadius: 16, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#FFD700' }}>
               <Text style={{ fontSize: 28 }}>🏪</Text>
@@ -325,7 +342,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         </ScrollView>
       )}
 
-      {/* Продавцы */}
       {activeTab === 'sellers' && (
         <>
           <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
@@ -337,8 +353,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
               </TouchableOpacity>
             ))}
           </View>
-
-          {/* Активные продавцы с блокировкой */}
           {filter === 'approved' && (
             <ScrollView contentContainerStyle={{ padding: 12 }}>
               <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>Активные продавцы ({sellers.length})</Text>
@@ -350,10 +364,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
                       <Text style={{ color: '#999', fontSize: 12 }}>✉️ {seller.email}</Text>
                       <Text style={{ color: '#999', fontSize: 12 }}>📍 {seller.city}</Text>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => toggleBlockSeller(seller)}
-                      style={{ backgroundColor: seller.isBlocked ? '#E8F5E9' : '#FFEBEE', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}
-                    >
+                    <TouchableOpacity onPress={() => toggleBlockSeller(seller)} style={{ backgroundColor: seller.isBlocked ? '#E8F5E9' : '#FFEBEE', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
                       <Text style={{ color: seller.isBlocked ? '#4CAF50' : '#f44336', fontWeight: '700', fontSize: 12 }}>
                         {seller.isBlocked ? '✅ Разблокировать' : '🚫 Заблокировать'}
                       </Text>
@@ -363,7 +374,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
               ))}
             </ScrollView>
           )}
-
           {filter !== 'approved' && (
             loading ? <ActivityIndicator size="large" color="#FF4500" style={{ marginTop: 40 }} /> : (
               <ScrollView contentContainerStyle={{ padding: 12 }}>
@@ -399,7 +409,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         </>
       )}
 
-      {/* Продвижение */}
       {activeTab === 'promotions' && (
         <ScrollView contentContainerStyle={{ padding: 12 }}>
           {promotionRequests.length === 0 ? (
@@ -441,12 +450,9 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         </ScrollView>
       )}
 
-      {/* Все скидки */}
       {activeTab === 'deals' && (
         <ScrollView contentContainerStyle={{ padding: 12 }}>
-          <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>
-            Все скидки ({allDeals.length})
-          </Text>
+          <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>Все скидки ({allDeals.length})</Text>
           {allDeals.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).map(deal => (
             <View key={deal.id} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 10, elevation: 2, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ width: 52, height: 52, borderRadius: 12, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
@@ -468,54 +474,6 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         </ScrollView>
       )}
 
-{activeTab === 'support' && (
-  <ScrollView contentContainerStyle={{ padding: 12 }}>
-    <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>
-      Жалобы покупателей
-    </Text>
-    {/* Загружаем жалобы */}
-    {allSupport?.length === 0 ? (
-      <View style={[styles.center, { marginTop: 40 }]}>
-        <Text style={{ fontSize: 48, marginBottom: 12 }}>🆘</Text>
-        <Text style={{ color: '#aaa' }}>Жалоб пока нет</Text>
-      </View>
-    ) : allSupport?.map((s: any) => (
-      <View key={s.id} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10, elevation: 2 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-          <Text style={{ fontWeight: '800', color: '#EF4444', fontSize: 15 }}>🆘 {s.topic}</Text>
-          <View style={{ backgroundColor: s.status === 'resolved' ? '#E8F5E9' : '#FFF9E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-            <Text style={{ color: s.status === 'resolved' ? '#4CAF50' : '#FF9800', fontWeight: '700', fontSize: 11 }}>
-              {s.status === 'resolved' ? '✅ Решено' : '⏳ Новая'}
-            </Text>
-          </View>
-        </View>
-        <Text style={{ color: '#666', fontSize: 13 }}>👤 {s.userEmail}</Text>
-        {s.dealTitle && <Text style={{ color: '#FF4500', fontSize: 13 }}>📦 {s.dealTitle} — {s.storeName}</Text>}
-        {s.message && (
-          <View style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 10, marginTop: 8 }}>
-            <Text style={{ color: '#333', fontSize: 14 }}>{s.message}</Text>
-          </View>
-        )}
-        <Text style={{ color: '#ccc', fontSize: 11, marginTop: 6 }}>
-          {s.createdAt ? new Date(s.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
-        </Text>
-        {s.status !== 'resolved' && (
-          <TouchableOpacity
-            style={{ backgroundColor: '#E8F5E9', borderRadius: 10, padding: 10, alignItems: 'center', marginTop: 10 }}
-            onPress={async () => {
-              await updateDoc(doc(db, 'support', s.id), { status: 'resolved' });
-              Alert.alert('✅ Отмечено как решено');
-            }}
-          >
-            <Text style={{ color: '#4CAF50', fontWeight: '700' }}>✅ Отметить как решено</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    ))}
-  </ScrollView>
-)}
-
-      {/* Все заказы */}
       {activeTab === 'orders' && (
         <ScrollView contentContainerStyle={{ padding: 12 }}>
           <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>
@@ -528,18 +486,61 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
                   <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 14 }} numberOfLines={1}>{order.dealTitle}</Text>
                   <Text style={{ color: '#999', fontSize: 12 }}>👤 {order.buyerEmail}</Text>
                   <Text style={{ color: '#999', fontSize: 12 }}>🏪 {order.storeName}</Text>
-                  <Text style={{ color: '#999', fontSize: 12 }}>📍 {order.city}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 15 }}>{Number(order.price).toLocaleString()} ₸</Text>
-                  <View style={{ backgroundColor: order.status === 'delivered' || order.status === 'buyer_confirmed' ? '#E8F5E9' : '#FFF9E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <Text style={{ color: order.status === 'delivered' || order.status === 'buyer_confirmed' ? '#4CAF50' : '#FF9800', fontWeight: '700', fontSize: 11 }}>
+                  <View style={{ backgroundColor: order.status === 'buyer_confirmed' ? '#E8F5E9' : '#FFF9E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                    <Text style={{ color: order.status === 'buyer_confirmed' ? '#4CAF50' : '#FF9800', fontWeight: '700', fontSize: 11 }}>
                       {order.status === 'buyer_confirmed' ? '✅ Завершён' : order.status === 'delivered' ? '🎉 Доставлен' : order.status === 'sent' ? '🚚 В пути' : order.status === 'packed' ? '📦 Упакован' : order.status === 'accepted' ? '✅ Принят' : '⏳ Ожидает'}
                     </Text>
                   </View>
                 </View>
               </View>
               <Text style={{ color: '#ccc', fontSize: 11, marginTop: 6 }}>#{order.id?.slice(-6).toUpperCase()} · {order.createdAt ? new Date(order.createdAt).toLocaleDateString('ru-RU') : ''}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {activeTab === 'support' && (
+        <ScrollView contentContainerStyle={{ padding: 12 }}>
+          <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 10 }}>Жалобы покупателей</Text>
+          {allSupport.length === 0 ? (
+            <View style={[styles.center, { marginTop: 40 }]}>
+              <Text style={{ fontSize: 48, marginBottom: 12 }}>🆘</Text>
+              <Text style={{ color: '#aaa' }}>Жалоб пока нет</Text>
+            </View>
+          ) : allSupport.map((s: any) => (
+            <View key={s.id} style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 10, elevation: 2 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontWeight: '800', color: '#EF4444', fontSize: 15 }}>🆘 {s.topic}</Text>
+                <View style={{ backgroundColor: s.status === 'resolved' ? '#E8F5E9' : '#FFF9E6', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                  <Text style={{ color: s.status === 'resolved' ? '#4CAF50' : '#FF9800', fontWeight: '700', fontSize: 11 }}>
+                    {s.status === 'resolved' ? '✅ Решено' : '⏳ Новая'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={{ color: '#666', fontSize: 13 }}>👤 {s.userEmail}</Text>
+              {s.dealTitle && <Text style={{ color: '#FF4500', fontSize: 13 }}>📦 {s.dealTitle} — {s.storeName}</Text>}
+              {s.message && (
+                <View style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 10, marginTop: 8 }}>
+                  <Text style={{ color: '#333', fontSize: 14 }}>{s.message}</Text>
+                </View>
+              )}
+              <Text style={{ color: '#ccc', fontSize: 11, marginTop: 6 }}>
+                {s.createdAt ? new Date(s.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+              </Text>
+              {s.status !== 'resolved' && (
+                <TouchableOpacity
+                  style={{ backgroundColor: '#E8F5E9', borderRadius: 10, padding: 10, alignItems: 'center', marginTop: 10 }}
+                  onPress={async () => {
+                    await updateDoc(doc(db, 'support', s.id), { status: 'resolved' });
+                    Alert.alert('✅ Отмечено как решено');
+                  }}
+                >
+                  <Text style={{ color: '#4CAF50', fontWeight: '700' }}>✅ Отметить как решено</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </ScrollView>

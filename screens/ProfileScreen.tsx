@@ -650,10 +650,12 @@ return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
       {/* Верхняя часть с градиентом */}
       <View style={{ backgroundColor: '#FF4500', paddingTop: 80, paddingBottom: 50, paddingHorizontal: 28, alignItems: 'center' }}>
-        <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginBottom: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }}>
-          <Text style={{ fontSize: 40, fontWeight: '900', color: '#fff' }}>O</Text>
-        </View>
-        <Text style={{ fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 6, marginBottom: 8 }}>O-GO</Text>
+      <Image
+  source={require('../assets/icon.png')}
+  style={{ width: 110, height: 110, borderRadius: 28, marginBottom: 16 }}
+  resizeMode="cover"
+/>
+<Text style={{ fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 6, marginBottom: 8 }}>O-GO</Text>
         <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 16, textAlign: 'center' }}>Все скидки Казахстана в одном месте</Text>
       </View>
   
