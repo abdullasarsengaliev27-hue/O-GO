@@ -268,46 +268,45 @@ export function DealCard({ item, user, onStorePress, userRole }: {
 
           <View style={{ height: 1, backgroundColor: '#f0f0f0', marginBottom: 12 }} />
 
-          <View style={{ gap: 8 }}>
+          <View style={{ gap: 8, backgroundColor: '#fff', borderRadius: 16, padding: 12, marginTop: 4 }}>
+  {user && user.uid !== item.sellerId && item.hasDelivery && (
+    <TouchableOpacity
+      onPress={() => setShowOrder(true)}
+      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FF4500', borderRadius: 14, paddingVertical: 14, shadowColor: '#FF4500', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
+    >
+      <Ionicons name="cart" size={18} color="#fff" />
+      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Заказать со скидкой</Text>
+    </TouchableOpacity>
+  )}
 
-            {user && user.uid !== item.sellerId && item.hasDelivery && (
-              <TouchableOpacity
-                onPress={() => setShowOrder(true)}
-                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FF4500', borderRadius: 14, paddingVertical: 14, shadowColor: '#FF4500', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
-              >
-                <Ionicons name="cart" size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Заказать со скидкой</Text>
-              </TouchableOpacity>
-            )}
+  {user && user.uid !== item.sellerId && (
+    <TouchableOpacity
+      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFF0EB', borderRadius: 14, paddingVertical: 12 }}
+      onPress={() => {
+        const chatId = [user.uid, item.sellerId].sort().join('_') + '_' + item.id;
+        setActiveChatId(chatId);
+      }}
+    >
+      <Ionicons name="chatbubble-ellipses" size={16} color="#FF4500" />
+      <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 14 }}>Написать продавцу</Text>
+    </TouchableOpacity>
+  )}
 
-            {user && user.uid !== item.sellerId && (
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFF0EB', borderRadius: 14, paddingVertical: 12 }}
-                onPress={() => {
-                  const chatId = [user.uid, item.sellerId].sort().join('_') + '_' + item.id;
-                  setActiveChatId(chatId);
-                }}
-              >
-                <Ionicons name="chatbubble-ellipses" size={16} color="#FF4500" />
-                <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 14 }}>Написать продавцу</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              onPress={async () => {
-                try {
-                  await Share.share({
-                    message: `🔥 Скидка в O-GO!\n\n${item.title}\n💰 Цена: ${Number(item.newPrice).toLocaleString()} ₸ (-${item.discount}%)\n🏪 ${item.store}\n\nСкачай O-GO и найди лучшие скидки Казахстана!`,
-                    title: item.title,
-                  });
-                } catch (e) {}
-              }}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 12 }}
-            >
-              <Ionicons name="share-social-outline" size={18} color="#22C55E" />
-              <Text style={{ color: '#22C55E', fontWeight: '700', fontSize: 14 }}>Поделиться скидкой</Text>
-            </TouchableOpacity>
-          </View>
+  <TouchableOpacity
+    onPress={async () => {
+      try {
+        await Share.share({
+          message: `🔥 Скидка в O-GO!\n\n${item.title}\n💰 Цена: ${Number(item.newPrice).toLocaleString()} ₸ (-${item.discount}%)\n🏪 ${item.store}\n\nСкачай O-GO и найди лучшие скидки Казахстана!`,
+          title: item.title,
+        });
+      } catch (e) {}
+    }}
+    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 12 }}
+  >
+    <Ionicons name="share-social-outline" size={18} color="#22C55E" />
+    <Text style={{ color: '#22C55E', fontWeight: '700', fontSize: 14 }}>Поделиться скидкой</Text>
+  </TouchableOpacity>
+</View>
         </View>
 
         {activeChatId && user && (

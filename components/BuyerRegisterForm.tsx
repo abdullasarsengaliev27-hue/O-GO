@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { styles } from './styles';
+import { PrivacyPolicyScreen } from '../screens/PrivacyPolicyScreen';
 
 const validateName = (name: string) => {
   if (!name.trim()) return 'Обязательное поле';
@@ -20,19 +21,26 @@ const validatePhone = (phone: string) => {
 
 const CITIES = ['Алматы', 'Астана', 'Шымкент', 'Актау', 'Актобе', 'Атырау', 'Павлодар', 'Караганда'];
 
-export function BuyerRegisterForm({ buyerName, setBuyerName, buyerPhone, setBuyerPhone, buyerCity, setBuyerCity }: {
+export function BuyerRegisterForm({
+  buyerName, setBuyerName,
+  buyerPhone, setBuyerPhone,
+  buyerCity, setBuyerCity,
+  agreedToPolicy, setAgreedToPolicy,
+}: {
   buyerName: string; setBuyerName: (v: string) => void;
   buyerPhone: string; setBuyerPhone: (v: string) => void;
   buyerCity: string; setBuyerCity: (v: string) => void;
+  agreedToPolicy: boolean; setAgreedToPolicy: (v: boolean) => void;
 }) {
   const [nameError, setNameError] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [showPolicy, setShowPolicy] = useState(false);
 
   return (
     <View>
       {/* Имя и Фамилия */}
       <Text style={styles.label}>Имя и Фамилия *</Text>
-      <View style={{ marginBottom: 4 }}>
+      <View style={{ marginBottom: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f8f8', borderRadius: 14, paddingHorizontal: 14, borderWidth: 1.5, borderColor: nameError ? '#EF4444' : buyerName && !nameError ? '#22C55E' : '#f0f0f0' }}>
           <Ionicons name="person-outline" size={18} color="#aaa" style={{ marginRight: 8 }} />
           <TextInput
@@ -45,13 +53,15 @@ export function BuyerRegisterForm({ buyerName, setBuyerName, buyerPhone, setBuye
           />
           {buyerName && !nameError && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
         </View>
-        {nameError ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4 }}>{nameError}</Text> : null}
-        {!nameError && <Text style={{ color: '#aaa', fontSize: 11, marginTop: 4, marginLeft: 4 }}>Только буквы, минимум два слова</Text>}
+        {nameError
+          ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4 }}>{nameError}</Text>
+          : <Text style={{ color: '#aaa', fontSize: 11, marginTop: 4, marginLeft: 4 }}>Только буквы, минимум два слова</Text>
+        }
       </View>
 
       {/* Телефон */}
-      <Text style={[styles.label, { marginTop: 10 }]}>Номер телефона *</Text>
-      <View style={{ marginBottom: 4 }}>
+      <Text style={[styles.label, { marginTop: 4 }]}>Номер телефона *</Text>
+      <View style={{ marginBottom: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f8f8', borderRadius: 14, paddingHorizontal: 14, borderWidth: 1.5, borderColor: phoneError ? '#EF4444' : buyerPhone && !phoneError ? '#22C55E' : '#f0f0f0' }}>
           <Ionicons name="call-outline" size={18} color="#aaa" style={{ marginRight: 8 }} />
           <TextInput
@@ -65,12 +75,12 @@ export function BuyerRegisterForm({ buyerName, setBuyerName, buyerPhone, setBuye
           />
           {buyerPhone && !phoneError && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
         </View>
-        {phoneError ? <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4 }}>{phoneError}</Text> : null}
+        {phoneError && <Text style={{ color: '#EF4444', fontSize: 12, marginTop: 4, marginLeft: 4 }}>{phoneError}</Text>}
       </View>
 
       {/* Город */}
-      <Text style={[styles.label, { marginTop: 10 }]}>Город *</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+      <Text style={[styles.label, { marginTop: 4 }]}>Город *</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
         {CITIES.map(city => (
           <TouchableOpacity
             key={city}
@@ -81,6 +91,39 @@ export function BuyerRegisterForm({ buyerName, setBuyerName, buyerPhone, setBuye
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Согласие с политикой */}
+      <TouchableOpacity
+        onPress={() => setAgreedToPolicy(!agreedToPolicy)}
+        style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: agreedToPolicy ? '#F0FFF4' : '#f8f8f8', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: agreedToPolicy ? '#22C55E' : '#f0f0f0', marginBottom: 8 }}
+      >
+        <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: agreedToPolicy ? '#22C55E' : '#fff', borderWidth: 2, borderColor: agreedToPolicy ? '#22C55E' : '#ddd', justifyContent: 'center', alignItems: 'center', marginTop: 1 }}>
+          {agreedToPolicy && <Ionicons name="checkmark" size={14} color="#fff" />}
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: '#1a1a1a', fontSize: 13, lineHeight: 20 }}>
+            Я согласен с{' '}
+            <Text
+              style={{ color: '#FF4500', fontWeight: '700', textDecorationLine: 'underline' }}
+              onPress={() => setShowPolicy(true)}
+            >
+              Политикой конфиденциальности
+            </Text>
+            {' '}и даю согласие на обработку персональных данных
+          </Text>
+        </View>
+      </TouchableOpacity>
+
+      {!agreedToPolicy && (
+        <Text style={{ color: '#aaa', fontSize: 11, marginLeft: 4, marginBottom: 8 }}>
+          Необходимо принять условия для регистрации
+        </Text>
+      )}
+
+      {/* Модал политики */}
+      <Modal visible={showPolicy} animationType="slide" onRequestClose={() => setShowPolicy(false)}>
+        <PrivacyPolicyScreen onClose={() => setShowPolicy(false)} />
+      </Modal>
     </View>
   );
 }

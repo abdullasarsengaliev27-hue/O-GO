@@ -16,6 +16,7 @@ import { FavoritesScreen } from './screens/FavoritesScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { CitySelectScreen } from './screens/CitySelectScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
+import { AIScreen } from './screens/AIScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -75,7 +76,6 @@ export default function App() {
         style={{ width: 140, height: 140, borderRadius: 36, marginBottom: 24, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20 }}
         resizeMode="cover"
       />
-      <Text style={{ fontSize: 48, fontWeight: '900', color: '#fff', letterSpacing: 6, marginBottom: 8 }}>O-GO</Text>
       <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.85)', marginBottom: 60 }}>Все скидки в одном месте</Text>
       <ActivityIndicator size="large" color="#fff" />
       <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, position: 'absolute', bottom: 40 }}>Казахстан 🇰🇿</Text>
@@ -114,6 +114,7 @@ export default function App() {
               'Карта': focused ? 'map' : 'map-outline',
               'Избранное': focused ? 'heart' : 'heart-outline',
               'Профиль': focused ? 'person' : 'person-outline',
+              'AI': focused ? 'sparkles' : 'sparkles-outline',
             };
             return <Ionicons name={icons[route.name] || 'ellipse'} size={size} color={color} />;
           },
@@ -122,6 +123,9 @@ export default function App() {
         <Tab.Screen name="Главная">{() => <HomeScreen user={user} userCity={userCity} userRole={userRole} />}</Tab.Screen>
         <Tab.Screen name="Поиск">{() => <SearchScreen user={user} userCity={userCity} />}</Tab.Screen>
         <Tab.Screen name="Карта">{() => <MapScreen user={user} userCity={userCity} />}</Tab.Screen>
+        <Tab.Screen name="AI">
+  {() => <AIScreen user={user} userCity={userCity} />}
+</Tab.Screen>
         {userRole !== 'seller' && userRole !== 'admin' && (
           <Tab.Screen name="Избранное">{() => <FavoritesScreen user={user} />}</Tab.Screen>
         )}

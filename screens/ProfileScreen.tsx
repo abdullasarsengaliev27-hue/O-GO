@@ -39,6 +39,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   const [password, setPassword] = useState('');
   const [buyerName, setBuyerName] = useState('');
   const [buyerPhone, setBuyerPhone] = useState('');
+  const [agreedToPolicy, setAgreedToPolicy] = useState(false);
   const [buyerCity, setBuyerCity] = useState('');
   const [loading, setLoading] = useState(false);
   const [screen, setScreen] = useState<ScreenType>('profile');
@@ -106,9 +107,12 @@ return onSnapshot(q, snap => {
   }, [user, userRole]);
 
   const BackBtn = () => (
-    <TouchableOpacity onPress={() => setScreen('profile')} style={{ padding: 16 }}>
-      <Text style={{ color: '#FF4500', fontSize: 16 }}>← Назад</Text>
-    </TouchableOpacity>
+    <View style={{ backgroundColor: '#fff', paddingTop: 54, paddingBottom: 8, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center' }}>
+      <TouchableOpacity onPress={() => setScreen('profile')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Ionicons name="arrow-back" size={22} color="#FF4500" />
+        <Text style={{ color: '#FF4500', fontSize: 16, fontWeight: '600' }}>Назад</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   if (user && userRole === 'admin') {
@@ -655,7 +659,6 @@ return (
   style={{ width: 110, height: 110, borderRadius: 28, marginBottom: 16 }}
   resizeMode="cover"
 />
-<Text style={{ fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: 6, marginBottom: 8 }}>O-GO</Text>
         <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 16, textAlign: 'center' }}>Все скидки Казахстана в одном месте</Text>
       </View>
   
@@ -749,11 +752,12 @@ return (
         </View>
   
         {selectedRole === 'buyer' && mode === 'register' && (
-          <BuyerRegisterForm
-            buyerName={buyerName} setBuyerName={setBuyerName}
-            buyerPhone={buyerPhone} setBuyerPhone={setBuyerPhone}
-            buyerCity={buyerCity} setBuyerCity={setBuyerCity}
-          />
+         <BuyerRegisterForm
+         buyerName={buyerName} setBuyerName={setBuyerName}
+         buyerPhone={buyerPhone} setBuyerPhone={setBuyerPhone}
+         buyerCity={buyerCity} setBuyerCity={setBuyerCity}
+         agreedToPolicy={agreedToPolicy} setAgreedToPolicy={setAgreedToPolicy}
+       />
         )}
   
         {loading ? <ActivityIndicator size="large" color="#FF4500" style={{ marginTop: 20 }} /> : (
@@ -782,6 +786,7 @@ return (
                   if (mode !== 'register') return;
                   setLoading(true);
                   try {
+                    if (!agreedToPolicy) return Alert.alert('Ошибка', 'Необходимо принять политику конфиденциальности');
                     const res = await createUserWithEmailAndPassword(auth, email, password);
                     await sendEmailVerification(res.user);await signOut(auth);
 Alert.alert(
