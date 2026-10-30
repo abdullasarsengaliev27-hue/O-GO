@@ -39,7 +39,6 @@ export default function App() {
       setCityLoaded(true);
     };
     init();
-    registerForPushNotifications().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -62,6 +61,7 @@ export default function App() {
         } catch {
           setUserRole('buyer');
         }
+        registerForPushNotifications(u.uid).catch(() => {});
       } else {
         setUserRole('');
       }
@@ -112,9 +112,9 @@ export default function App() {
               'Главная': focused ? 'home' : 'home-outline',
               'Поиск': focused ? 'search' : 'search-outline',
               'Карта': focused ? 'map' : 'map-outline',
+              'AI': focused ? 'sparkles' : 'sparkles-outline',
               'Избранное': focused ? 'heart' : 'heart-outline',
               'Профиль': focused ? 'person' : 'person-outline',
-              'AI': focused ? 'sparkles' : 'sparkles-outline',
             };
             return <Ionicons name={icons[route.name] || 'ellipse'} size={size} color={color} />;
           },
@@ -123,9 +123,7 @@ export default function App() {
         <Tab.Screen name="Главная">{() => <HomeScreen user={user} userCity={userCity} userRole={userRole} />}</Tab.Screen>
         <Tab.Screen name="Поиск">{() => <SearchScreen user={user} userCity={userCity} />}</Tab.Screen>
         <Tab.Screen name="Карта">{() => <MapScreen user={user} userCity={userCity} />}</Tab.Screen>
-        <Tab.Screen name="AI">
-  {() => <AIScreen user={user} userCity={userCity} />}
-</Tab.Screen>
+        <Tab.Screen name="AI">{() => <AIScreen user={user} userCity={userCity} />}</Tab.Screen>
         {userRole !== 'seller' && userRole !== 'admin' && (
           <Tab.Screen name="Избранное">{() => <FavoritesScreen user={user} />}</Tab.Screen>
         )}
