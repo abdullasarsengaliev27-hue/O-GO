@@ -1,42 +1,33 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { User } from 'firebase/auth';
 import { ChatScreen } from '../ChatScreen';
-
 
 export function SellerChats({ user }: { user: User }) {
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState<any>(null);
 
-  type Chat = {
-    id: string;
-    sellerId: string;
-    lastMessageAt?: Timestamp;
-  };
-  
   useEffect(() => {
     const q = query(
       collection(db, 'chats'),
-      where('sellerId', '==', user.uid)
+      where('participants', 'array-contains', user.uid)
     );
-  
+
     return onSnapshot(q, (snap) => {
-      const chatsData: Chat[] = snap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as Chat[];
-  
-      chatsData.sort(
-        (a, b) =>
-          (b.lastMessageAt?.toMillis() ?? 0) -
-          (a.lastMessageAt?.toMillis() ?? 0)
-      );
-  
-      setChats(chatsData);
+      const data = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as any))
+        // Только чаты, где этот пользователь — продавец
+        .filter((c) => c.sellerId === user.uid)
+        .sort(
+          (a, b) =>
+            new Date(b.lastMessageAt || 0).getTime() -
+            new Date(a.lastMessageAt || 0).getTime()
+        );
+      setChats(data);
       setLoading(false);
     });
   }, [user]);
@@ -49,6 +40,7 @@ export function SellerChats({ user }: { user: User }) {
       otherUserName={selectedChat.buyerEmail?.split('@')[0] || 'Покупатель'}
       dealTitle={selectedChat.dealTitle}
       isSeller={true}
+      topInset={false}
       onBack={() => setSelectedChat(null)}
     />
   );
@@ -68,7 +60,7 @@ export function SellerChats({ user }: { user: User }) {
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           {chats.length === 0 ? (
             <View style={{ alignItems: 'center', marginTop: 60 }}>
-              <Text style={{ fontSize: 56, marginBottom: 16 }}>💬</Text>
+              <Text style={{ fontSize: 56, marginBottom: 16 }}>��</Text>
               <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 20, marginBottom: 8 }}>Нет чатов</Text>
               <Text style={{ color: '#999', textAlign: 'center', fontSize: 14 }}>Покупатели напишут вам из карточек товаров</Text>
             </View>
@@ -78,7 +70,7 @@ export function SellerChats({ user }: { user: User }) {
               <TouchableOpacity
                 key={chat.id}
                 onPress={() => setSelectedChat(chat)}
-                style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, borderWidth: hasUnread ? 2 : 0, borderColor: '#FF4500' }}
+                style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12, elevation: 2, borderWidth: hasUnread ? 2 : 0, borderColor: '#FF4500' }}
               >
                 <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
                   <Ionicons name="person" size={24} color="#FF4500" />
@@ -87,17 +79,17 @@ export function SellerChats({ user }: { user: User }) {
                   <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15 }}>
                     {chat.buyerEmail?.split('@')[0] || 'Покупатель'}
                   </Text>
-                  {chat.dealTitle && <Text style={{ color: '#FF4500', fontSize: 12, marginBottom: 2 }} numberOfLines={1}>📦 {chat.dealTitle}</Text>}
+                  {chat.dealTitle ? <Text style={{ color: '#FF4500', fontSize: 12, marginBottom: 2 }} numberOfLines={1}>📦 {chat.dealTitle}</Text> : null}
                   <Text style={{ color: hasUnread ? '#1a1a1a' : '#999', fontSize: 13, fontWeight: hasUnread ? '600' : '400' }} numberOfLines={1}>
                     {chat.lastMessage || 'Начало переписки'}
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                  {chat.lastMessageAt && (
+                  {chat.lastMessageAt ? (
                     <Text style={{ color: '#ccc', fontSize: 11 }}>
                       {new Date(chat.lastMessageAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
                     </Text>
-                  )}
+                  ) : null}
                   {hasUnread && (
                     <View style={{ backgroundColor: '#FF4500', borderRadius: 10, minWidth: 20, height: 20, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 6 }}>
                       <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>{chat.unreadCount}</Text>

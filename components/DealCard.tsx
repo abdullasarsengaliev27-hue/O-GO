@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
 import { View, Text, Image, TouchableOpacity, Alert, Modal, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { doc, getDoc, setDoc, deleteDoc, collection, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, collection, onSnapshot, updateDoc, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
-import { StarRating } from './StarRating';
 import { ReviewModal } from './ReviewModal';
 import { OrderModal } from './OrderModal';
 import { BookingModal } from './BookingModal';
@@ -27,14 +26,13 @@ export function DealCard({ item, user, onStorePress, userRole }: {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
   // Высота фото зависит от формата
-  const getImageHeight = () => {
+  const imageHeight = (() => {
     const aspect = item.imageAspect;
     if (!aspect) return 220;
-    if (aspect[0] === 4 && aspect[1] === 5) return 280; // 4:5 вертикальный
-    if (aspect[0] === 16 && aspect[1] === 9) return 200; // 16:9 горизонтальный
+    if (aspect[0] === 4 && aspect[1] === 5) return 300;
+    if (aspect[0] === 16 && aspect[1] === 9) return 200;
     return 220;
-  };
-  const imageHeight = getImageHeight();
+  })();
 
   useEffect(() => {
     if (!user) return;
@@ -43,10 +41,7 @@ export function DealCard({ item, user, onStorePress, userRole }: {
 
   useEffect(() => {
     if (!item.id) return;
-    const { updateDoc, increment } = require('firebase/firestore');
-    updateDoc(doc(db, 'deals', item.id), {
-      viewCount: increment(1)
-    }).catch(() => {});
+    updateDoc(doc(db, 'deals', item.id), { viewCount: increment(1) }).catch(() => {});
   }, [item.id]);
 
   useEffect(() => {
@@ -68,6 +63,8 @@ export function DealCard({ item, user, onStorePress, userRole }: {
     ? Number(item.marketPrice) - Number(item.newPrice)
     : Number(item.oldPrice) - Number(item.newPrice);
 
+  const isBoosted = item.isBoosted && item.boostedUntil && new Date(item.boostedUntil) > new Date();
+
   return (
     <>
       <ReviewModal deal={item} user={user} visible={showReviews} onClose={() => setShowReviews(false)} />
@@ -86,80 +83,75 @@ export function DealCard({ item, user, onStorePress, userRole }: {
         elevation: 4,
         overflow: 'hidden',
       }}>
-        {/* Фото */}
-        <TouchableOpacity onPress={() => item.imageUrl && setShowFullImage(true)} activeOpacity={0.95}>
-          {item.imageUrl
-            ? <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: imageHeight }} resizeMode="cover" />
-            : <View style={{ width: '100%', height: imageHeight, backgroundColor: '#f8f8f8', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="image-outline" size={48} color="#ddd" />
-              </View>
-          }
+        {/* ===== ФОТО + всё, что поверх него ===== */}
+        <View style={{ width: '100%', height: imageHeight, backgroundColor: '#f8f8f8' }}>
+          <TouchableOpacity
+            style={{ width: '100%', height: '100%' }}
+            onPress={() => item.imageUrl && setShowFullImage(true)}
+            activeOpacity={0.95}
+          >
+            {item.imageUrl
+              ? <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              : <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  <Ionicons name="image-outline" size={48} color="#ddd" />
+                </View>
+            }
+          </TouchableOpacity>
+
+          {/* Затемнение снизу — только на фото */}
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(0,0,0,0.35)' }} />
+
+          {/* Бейдж скидки */}
+          <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: '#FF4500', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Ionicons name="flash" size={13} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>-{item.discount}%</Text>
+          </View>
+
+          {/* Турбо-буст */}
+          {isBoosted && (
+            <View style={{ position: 'absolute', top: 12, left: 90, backgroundColor: '#FFD700', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 }}>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>🚀 ТОП</Text>
+            </View>
+          )}
+
+          {/* Избранное — только покупателям */}
+          {user && userRole !== 'seller' && (
+            <TouchableOpacity
+              onPress={toggleFav}
+              style={{ position: 'absolute', top: 12, right: 12, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.95)', justifyContent: 'center', alignItems: 'center', elevation: 2 }}
+            >
+              <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={isFav ? '#FF4500' : '#999'} />
+            </TouchableOpacity>
+          )}
+
+          {/* Иконка полноэкранного просмотра */}
           {item.imageUrl && (
-            <View style={{ position: 'absolute', bottom: 48, right: 12, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 8, padding: 5 }}>
+            <View pointerEvents="none" style={{ position: 'absolute', bottom: 48, right: 12, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 8, padding: 5 }}>
               <Ionicons name="expand" size={16} color="#fff" />
             </View>
           )}
-        </TouchableOpacity>
 
-        {/* Градиент снизу */}
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'transparent' }}>
-          <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(0,0,0,0.35)' }} />
-        </View>
-
-        {/* Бейдж скидки */}
-        <View style={{
-          position: 'absolute', top: 12, left: 12,
-          backgroundColor: '#FF4500',
-          borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5,
-          flexDirection: 'row', alignItems: 'center', gap: 4,
-        }}>
-          <Ionicons name="flash" size={13} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>-{item.discount}%</Text>
-        </View>
-
-        {/* Турбо-буст бейдж */}
-        {item.isBoosted && item.boostedUntil && new Date(item.boostedUntil) > new Date() && (
-          <View style={{ position: 'absolute', top: 12, left: 90, backgroundColor: '#FFD700', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>🚀 ТОП</Text>
-          </View>
-        )}
-
-        {/* Кнопка избранного */}
-        {user && userRole !== 'seller' && (
-          <TouchableOpacity
-            onPress={toggleFav}
-            style={{
-              position: 'absolute', top: 12, right: 12,
-              width: 38, height: 38, borderRadius: 19,
-              backgroundColor: 'rgba(255,255,255,0.95)',
-              justifyContent: 'center', alignItems: 'center',
-              shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
-            }}
-          >
-            <Ionicons name={isFav ? 'heart' : 'heart-outline'} size={20} color={isFav ? '#FF4500' : '#999'} />
-          </TouchableOpacity>
-        )}
-
-        {/* Цены поверх фото */}
-        <View style={{ position: 'absolute', bottom: 10, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>
-              {Number(item.newPrice).toLocaleString()} ₸
-            </Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textDecorationLine: 'line-through' }}>
-              {Number(item.oldPrice).toLocaleString()} ₸
-            </Text>
-          </View>
-          {savingsAmount > 0 && (
-            <View style={{ backgroundColor: '#4CAF50', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
-                -{savingsAmount.toLocaleString()} ₸
+          {/* Цены поверх фото */}
+          <View pointerEvents="none" style={{ position: 'absolute', bottom: 10, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>
+                {Number(item.newPrice).toLocaleString()} ₸
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, textDecorationLine: 'line-through' }}>
+                {Number(item.oldPrice).toLocaleString()} ₸
               </Text>
             </View>
-          )}
+            {savingsAmount > 0 && (
+              <View style={{ backgroundColor: '#4CAF50', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+                  -{savingsAmount.toLocaleString()} ₸
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {/* Контент */}
+        {/* ===== КОНТЕНТ ===== */}
         <View style={{ padding: 14 }}>
           <Text style={{ color: '#FF4500', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' }}>
             {item.category}
@@ -191,7 +183,7 @@ export function DealCard({ item, user, onStorePress, userRole }: {
             <Ionicons name="location-outline" size={13} color="#999" />
             <Text style={{ color: '#999', fontSize: 12 }}>{item.city}</Text>
             {item.exactAddress && (
-              <Text style={{ color: '#bbb', fontSize: 11 }} numberOfLines={1}> · {item.exactAddress.split(',').slice(0, 2).join(',')}</Text>
+              <Text style={{ color: '#bbb', fontSize: 11, flex: 1 }} numberOfLines={1}> · {item.exactAddress.split(',').slice(0, 2).join(',')}</Text>
             )}
           </View>
 
@@ -268,45 +260,46 @@ export function DealCard({ item, user, onStorePress, userRole }: {
 
           <View style={{ height: 1, backgroundColor: '#f0f0f0', marginBottom: 12 }} />
 
-          <View style={{ gap: 8, backgroundColor: '#fff', borderRadius: 16, padding: 12, marginTop: 4 }}>
-  {user && user.uid !== item.sellerId && item.hasDelivery && (
-    <TouchableOpacity
-      onPress={() => setShowOrder(true)}
-      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FF4500', borderRadius: 14, paddingVertical: 14, shadowColor: '#FF4500', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 }}
-    >
-      <Ionicons name="cart" size={18} color="#fff" />
-      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Заказать со скидкой</Text>
-    </TouchableOpacity>
-  )}
+          {/* Кнопки */}
+          <View style={{ gap: 8 }}>
+            {user && user.uid !== item.sellerId && item.hasDelivery && (
+              <TouchableOpacity
+                onPress={() => setShowOrder(true)}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FF4500', borderRadius: 14, paddingVertical: 14, elevation: 4 }}
+              >
+                <Ionicons name="cart" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Заказать со скидкой</Text>
+              </TouchableOpacity>
+            )}
 
-  {user && user.uid !== item.sellerId && (
-    <TouchableOpacity
-      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFF0EB', borderRadius: 14, paddingVertical: 12 }}
-      onPress={() => {
-        const chatId = [user.uid, item.sellerId].sort().join('_') + '_' + item.id;
-        setActiveChatId(chatId);
-      }}
-    >
-      <Ionicons name="chatbubble-ellipses" size={16} color="#FF4500" />
-      <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 14 }}>Написать продавцу</Text>
-    </TouchableOpacity>
-  )}
+            {user && user.uid !== item.sellerId && (
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFF0EB', borderRadius: 14, paddingVertical: 12 }}
+                onPress={() => {
+                  const chatId = [user.uid, item.sellerId].sort().join('_') + '_' + item.id;
+                  setActiveChatId(chatId);
+                }}
+              >
+                <Ionicons name="chatbubble-ellipses" size={16} color="#FF4500" />
+                <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 14 }}>Написать продавцу</Text>
+              </TouchableOpacity>
+            )}
 
-  <TouchableOpacity
-    onPress={async () => {
-      try {
-        await Share.share({
-          message: `🔥 Скидка в O-GO!\n\n${item.title}\n💰 Цена: ${Number(item.newPrice).toLocaleString()} ₸ (-${item.discount}%)\n🏪 ${item.store}\n\nСкачай O-GO и найди лучшие скидки Казахстана!`,
-          title: item.title,
-        });
-      } catch (e) {}
-    }}
-    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 12 }}
-  >
-    <Ionicons name="share-social-outline" size={18} color="#22C55E" />
-    <Text style={{ color: '#22C55E', fontWeight: '700', fontSize: 14 }}>Поделиться скидкой</Text>
-  </TouchableOpacity>
-</View>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  await Share.share({
+                    message: `🔥 Скидка в O-GO!\n\n${item.title}\n💰 Цена: ${Number(item.newPrice).toLocaleString()} ₸ (-${item.discount}%)\n🏪 ${item.store}\n\nСкачай O-GO и найди лучшие скидки Казахстана!`,
+                    title: item.title,
+                  });
+                } catch (e) {}
+              }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, backgroundColor: '#E8F5E9', borderRadius: 12 }}
+            >
+              <Ionicons name="share-social-outline" size={18} color="#22C55E" />
+              <Text style={{ color: '#22C55E', fontWeight: '700', fontSize: 14 }}>Поделиться скидкой</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {activeChatId && user && (
@@ -337,9 +330,6 @@ export function DealCard({ item, user, onStorePress, userRole }: {
                 <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
               </View>
               <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '70%' }} resizeMode="contain" />
-              <View style={{ position: 'absolute', bottom: 50, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 }}>
-                <Text style={{ color: '#fff', fontSize: 13 }}>Нажми ✕ чтобы закрыть</Text>
-              </View>
             </View>
           </Modal>
         )}

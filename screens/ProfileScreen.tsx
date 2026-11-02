@@ -20,6 +20,7 @@ import { BuyerChatsScreen } from './BuyerChatsScreen';
 import { PromotionScreen } from './seller/PromotionScreen';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { SocialLinks } from '../components/SocialLinks';
 
 type ScreenType = 'profile' | 'add' | 'stats' | 'chats' | 'orders' | 'sellerOrders' | 'savings' | 'happyHours' | 'kaspiSettings' | 'buyerChats' | 'promotion';
 

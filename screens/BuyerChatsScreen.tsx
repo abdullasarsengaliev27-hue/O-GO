@@ -13,10 +13,10 @@ export function BuyerChatsScreen({ user }: { user: User }) {
 
   useEffect(() => {
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
-        return onSnapshot(q, snap => {
+    return onSnapshot(q, snap => {
       setChats(snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      .sort((a: any, b: any) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()));
-            setLoading(false);
+        .sort((a: any, b: any) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()));
+      setLoading(false);
     });
   }, [user]);
 
@@ -27,6 +27,7 @@ export function BuyerChatsScreen({ user }: { user: User }) {
       otherUserId={selectedChat.sellerId}
       otherUserName={selectedChat.sellerName || 'Продавец'}
       dealTitle={selectedChat.dealTitle}
+      topInset={false}
       onBack={() => setSelectedChat(null)}
     />
   );
@@ -35,7 +36,6 @@ export function BuyerChatsScreen({ user }: { user: User }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      {/* Шапка */}
       <View style={{ backgroundColor: '#FF4500', paddingTop: 20, paddingBottom: 40, paddingHorizontal: 20 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View>
@@ -87,35 +87,29 @@ export function BuyerChatsScreen({ user }: { user: User }) {
                     alignItems: 'center',
                     gap: 12,
                     elevation: 2,
-                    shadowColor: '#000',
-                    shadowOpacity: 0.05,
-                    shadowRadius: 8,
                     borderWidth: hasUnread ? 2 : 0,
                     borderColor: '#FF4500',
                   }}
                 >
-                  {/* Аватар */}
                   <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
                     <Ionicons name="storefront" size={26} color="#FF4500" />
                   </View>
 
-                  {/* Контент */}
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 2 }}>
                       {chat.sellerName || 'Продавец'}
                     </Text>
-                    {chat.dealTitle && (
+                    {chat.dealTitle ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3 }}>
                         <Ionicons name="pricetag" size={11} color="#FF4500" />
                         <Text style={{ color: '#FF4500', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{chat.dealTitle}</Text>
                       </View>
-                    )}
+                    ) : null}
                     <Text style={{ color: hasUnread ? '#1a1a1a' : '#999', fontSize: 13, fontWeight: hasUnread ? '600' : '400' }} numberOfLines={1}>
                       {chat.lastMessage || 'Начни общение'}
                     </Text>
                   </View>
 
-                  {/* Время + бейдж */}
                   <View style={{ alignItems: 'flex-end', gap: 6 }}>
                     <Text style={{ color: '#ccc', fontSize: 11 }}>{time}</Text>
                     {hasUnread ? (

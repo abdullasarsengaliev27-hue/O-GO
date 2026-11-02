@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -14,7 +15,7 @@ interface Message {
   read: boolean;
 }
 
-export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle, buyerId, sellerId, isSeller, onBack }: {
+export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle, buyerId, sellerId, isSeller, topInset = true, onBack }: {
   user: User;
   chatId: string;
   otherUserId: string;
@@ -23,8 +24,13 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
   buyerId?: string;
   sellerId?: string;
   isSeller?: boolean;
+  topInset?: boolean; // false, если сверху уже есть панель «Назад»
   onBack: () => void;
 }) {
+  const insets = useSafeAreaInsets();
+  const headerTop = topInset ? insets.top + 10 : 14;
+  const bottomPad = topInset ? Math.max(insets.bottom, 12) : 12;
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -111,9 +117,9 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
         )}
         <View style={{ flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-end', marginBottom: 6, paddingHorizontal: 12 }}>
           {!isMe && (
-            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', marginRight: 6 }}>
+            <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', marginRight: 6, overflow: 'hidden' }}>
               {otherProfile?.storeLogo
-                ? <Image source={{ uri: otherProfile.storeLogo }} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                ? <Image source={{ uri: otherProfile.storeLogo }} style={{ width: 32, height: 32 }} />
                 : <Ionicons name="person" size={16} color="#FF4500" />
               }
             </View>
@@ -126,7 +132,6 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
             borderBottomLeftRadius: isMe ? 18 : 4,
             padding: 12,
             elevation: 1,
-            shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 4,
           }}>
             <Text style={{ color: isMe ? '#fff' : '#1a1a1a', fontSize: 15, lineHeight: 20 }}>{item.text}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
@@ -144,27 +149,27 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#f5f5f5' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* Шапка */}
-      <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-      <TouchableOpacity
-  onPress={onBack}
-  style={{ width: 40, height: 40, justifyContent: 'center', alignItems: 'center' }}
-  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
->
-  <Ionicons name="arrow-back" size={24} color="#fff" />
-</TouchableOpacity>
-        <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: headerTop, paddingBottom: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <TouchableOpacity
+          onPress={onBack}
+          style={{ width: 44, height: 44, justifyContent: 'center', alignItems: 'center' }}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="arrow-back" size={26} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
           {otherProfile?.storeLogo
-            ? <Image source={{ uri: otherProfile.storeLogo }} style={{ width: 40, height: 40, borderRadius: 14 }} />
+            ? <Image source={{ uri: otherProfile.storeLogo }} style={{ width: 40, height: 40 }} />
             : <Ionicons name="person" size={20} color="#fff" />
           }
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }}>
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }} numberOfLines={1}>
             {otherProfile?.storeName || otherUserName}
           </Text>
-          {dealTitle && (
+          {dealTitle ? (
             <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }} numberOfLines={1}>📦 {dealTitle}</Text>
-          )}
+          ) : null}
         </View>
       </View>
 
@@ -193,61 +198,61 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
         />
       )}
 
-     {/* Быстрые ответы для продавца */}
-{isSeller && showQuickReplies && (
-  <View style={{ backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingHorizontal: 12, paddingVertical: 8 }}>
-    <Text style={{ color: '#999', fontSize: 12, marginBottom: 8, fontWeight: '600' }}>⚡ Быстрые ответы:</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      {[
-        '✅ Да, скидка действует',
-        '❌ Товар закончился',
-        '📍 Наш адрес: ' + (otherProfile?.storeAddress || 'уточните пожалуйста'),
-        '⏰ Время работы: 9:00-21:00',
-        '🚚 Доставка есть, уточните детали',
-        '💰 Цена актуальна',
-        '📞 Перезвоните нам',
-        '🙏 Спасибо за обращение!',
-        '⏳ Уточню информацию и отвечу',
-        '✅ Ваш заказ принят!',
-      ].map(reply => (
-        <TouchableOpacity
-          key={reply}
-          onPress={() => { setText(reply); setShowQuickReplies(false); }}
-          style={{ backgroundColor: '#FFF0EB', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: '#FF4500' + '30' }}
-        >
-          <Text style={{ color: '#FF4500', fontSize: 13, fontWeight: '600' }}>{reply}</Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  </View>
-)}
+      {/* Быстрые ответы для продавца */}
+      {isSeller && showQuickReplies && (
+        <View style={{ backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingHorizontal: 12, paddingVertical: 8 }}>
+          <Text style={{ color: '#999', fontSize: 12, marginBottom: 8, fontWeight: '600' }}>⚡ Быстрые ответы:</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[
+              '✅ Да, скидка действует',
+              '❌ Товар закончился',
+              '📍 Наш адрес: ' + (otherProfile?.storeAddress || 'уточните пожалуйста'),
+              '⏰ Время работы: 9:00-21:00',
+              '🚚 Доставка есть, уточните детали',
+              '💰 Цена актуальна',
+              '📞 Перезвоните нам',
+              '🙏 Спасибо за обращение!',
+              '⏳ Уточню информацию и отвечу',
+              '✅ Ваш заказ принят!',
+            ].map(reply => (
+              <TouchableOpacity
+                key={reply}
+                onPress={() => { setText(reply); setShowQuickReplies(false); }}
+                style={{ backgroundColor: '#FFF0EB', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, borderWidth: 1, borderColor: '#FF450030' }}
+              >
+                <Text style={{ color: '#FF4500', fontSize: 13, fontWeight: '600' }}>{reply}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
-{/* Поле ввода */}
-<View style={{ backgroundColor: '#fff', padding: 12, flexDirection: 'row', alignItems: 'flex-end', gap: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
-  {isSeller && (
-    <TouchableOpacity
-      onPress={() => setShowQuickReplies(!showQuickReplies)}
-      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: showQuickReplies ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
-    >
-      <Ionicons name="flash" size={18} color={showQuickReplies ? '#fff' : '#999'} />
-    </TouchableOpacity>
-  )}
-  <TextInput
-    style={{ flex: 1, backgroundColor: '#f8f8f8', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 120, borderWidth: 1.5, borderColor: '#f0f0f0' }}
-    placeholder="Написать сообщение..."
-    value={text}
-    onChangeText={setText}
-    multiline
-    placeholderTextColor="#aaa"
-  />
-  <TouchableOpacity
-    onPress={sendMessage}
-    disabled={!text.trim()}
-    style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: text.trim() ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
-  >
-    <Ionicons name="send" size={20} color={text.trim() ? '#fff' : '#aaa'} />
-  </TouchableOpacity>
-</View>
+      {/* Поле ввода */}
+      <View style={{ backgroundColor: '#fff', paddingTop: 12, paddingHorizontal: 12, paddingBottom: bottomPad, flexDirection: 'row', alignItems: 'flex-end', gap: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
+        {isSeller && (
+          <TouchableOpacity
+            onPress={() => setShowQuickReplies(!showQuickReplies)}
+            style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: showQuickReplies ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
+          >
+            <Ionicons name="flash" size={18} color={showQuickReplies ? '#fff' : '#999'} />
+          </TouchableOpacity>
+        )}
+        <TextInput
+          style={{ flex: 1, backgroundColor: '#f8f8f8', borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 120, borderWidth: 1.5, borderColor: '#f0f0f0' }}
+          placeholder="Написать сообщение..."
+          value={text}
+          onChangeText={setText}
+          multiline
+          placeholderTextColor="#aaa"
+        />
+        <TouchableOpacity
+          onPress={sendMessage}
+          disabled={!text.trim()}
+          style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: text.trim() ? '#FF4500' : '#f0f0f0', justifyContent: 'center', alignItems: 'center' }}
+        >
+          <Ionicons name="send" size={20} color={text.trim() ? '#fff' : '#aaa'} />
+        </TouchableOpacity>
+      </View>
     </KeyboardAvoidingView>
   );
 }
