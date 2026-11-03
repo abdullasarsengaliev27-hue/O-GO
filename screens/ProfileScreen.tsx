@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Alert, Image, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, User, sendEmailVerification } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, onSnapshot, query, where, addDoc, updateDoc } from 'firebase/firestore';
@@ -18,9 +19,9 @@ import { AdminScreen } from './AdminScreen';
 import { KaspiSettingsScreen } from './seller/KaspiSettingsScreen';
 import { BuyerChatsScreen } from './BuyerChatsScreen';
 import { PromotionScreen } from './seller/PromotionScreen';
+import { SocialLinks } from '../components/SocialLinks';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { SocialLinks } from '../components/SocialLinks';
 
 type ScreenType = 'profile' | 'add' | 'stats' | 'chats' | 'orders' | 'sellerOrders' | 'savings' | 'happyHours' | 'kaspiSettings' | 'buyerChats' | 'promotion';
 
@@ -30,6 +31,9 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   userCity?: string | null,
   onCityChange?: (city: string | null) => void
 }) {
+  const insets = useSafeAreaInsets();
+  const top = insets.top;
+
   const [mode, setMode] = useState<'choose' | 'login' | 'register' | 'sellerMenu' | 'application' | 'admin'>('choose');
   const [selectedRole, setSelectedRole] = useState<'buyer' | 'seller'>('buyer');
   const [email, setEmail] = useState('');
@@ -95,9 +99,13 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   }, [user, userRole]);
 
   const BackBtn = () => (
-    <View style={{ backgroundColor: '#fff', paddingTop: 54, paddingBottom: 8, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center' }}>
-      <TouchableOpacity onPress={() => setScreen('profile')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Ionicons name="arrow-back" size={22} color="#FF4500" />
+    <View style={{ backgroundColor: '#fff', paddingTop: top + 8, paddingBottom: 10, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', flexDirection: 'row', alignItems: 'center' }}>
+      <TouchableOpacity
+        onPress={() => setScreen('profile')}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+      >
+        <Ionicons name="arrow-back" size={24} color="#FF4500" />
         <Text style={{ color: '#FF4500', fontSize: 16, fontWeight: '600' }}>Назад</Text>
       </TouchableOpacity>
     </View>
@@ -181,7 +189,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     // ----- Профиль продавца -----
     if (userRole === 'seller') return (
       <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
-        <View style={{ backgroundColor: '#FF4500', paddingTop: 24, paddingBottom: 40, paddingHorizontal: 20 }}>
+        <View style={{ backgroundColor: '#FF4500', paddingTop: top + 16, paddingBottom: 40, paddingHorizontal: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
             <TouchableOpacity
               onPress={changeSellerLogo}
@@ -347,6 +355,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
             <Ionicons name="chevron-forward" size={18} color="#ccc" />
           </TouchableOpacity>
 
+          <SocialLinks />
+
           <TouchableOpacity style={{ backgroundColor: '#FFF0EB', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }} onPress={() => signOut(auth)}>
             <Ionicons name="log-out-outline" size={20} color="#FF4500" />
             <Text style={{ color: '#FF4500', fontWeight: '700', fontSize: 15 }}>Выйти из аккаунта</Text>
@@ -359,7 +369,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     return (
       <>
         <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
-          <View style={{ backgroundColor: '#FF4500', paddingTop: 24, paddingBottom: 40, paddingHorizontal: 20 }}>
+          <View style={{ backgroundColor: '#FF4500', paddingTop: top + 16, paddingBottom: 40, paddingHorizontal: 20 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
               <View style={{ width: 76, height: 76, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginRight: 16, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }}>
                 <Text style={{ fontSize: 34 }}>🛍</Text>
@@ -479,6 +489,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
 
+            <SocialLinks />
+
             <TouchableOpacity style={{ backgroundColor: '#FFF0EB', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }} onPress={() => signOut(auth)}>
               <Ionicons name="log-out-outline" size={20} color="#FF4500" />
               <Text style={{ color: '#FF4500', fontWeight: '700', fontSize: 15 }}>Выйти из аккаунта</Text>
@@ -486,7 +498,6 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
           </View>
         </ScrollView>
 
-        {/* Модал жалобы */}
         <Modal visible={showSupportModal} transparent animationType="slide" onRequestClose={() => setShowSupportModal(false)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
             <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' }}>
@@ -559,9 +570,14 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
 
   if (mode === 'sellerMenu') return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      <ScrollView contentContainerStyle={[styles.center, { padding: 24, flexGrow: 1 }]}>
-        <TouchableOpacity onPress={() => setMode('choose')} style={{ alignSelf: 'flex-start', marginBottom: 24 }}>
-          <Text style={{ color: '#FF4500', fontSize: 16 }}>← Назад</Text>
+      <ScrollView contentContainerStyle={[styles.center, { paddingHorizontal: 24, paddingTop: top + 20, paddingBottom: 24, flexGrow: 1 }]}>
+        <TouchableOpacity
+          onPress={() => setMode('choose')}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={{ alignSelf: 'flex-start', marginBottom: 24, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#FF4500" />
+          <Text style={{ color: '#FF4500', fontSize: 16, fontWeight: '600' }}>Назад</Text>
         </TouchableOpacity>
         <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#222', marginBottom: 8 }}>🏪 Продавец</Text>
         <Text style={{ color: '#999', textAlign: 'center', marginBottom: 32, fontSize: 15 }}>
@@ -584,7 +600,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
       </ScrollView>
 
       {showAdminInput && (
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 20, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10 }}>
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', padding: 20, paddingBottom: 20 + insets.bottom, borderTopLeftRadius: 20, borderTopRightRadius: 20, elevation: 10 }}>
           <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 16, marginBottom: 6 }}>🛡 Панель администратора</Text>
           <Text style={{ color: '#999', fontSize: 13, marginBottom: 16 }}>Войдите через аккаунт администратора</Text>
           <TextInput
@@ -642,8 +658,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   );
 
   if (mode === 'choose') return (
-    <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      <View style={{ backgroundColor: '#FF4500', paddingTop: 80, paddingBottom: 50, paddingHorizontal: 28, alignItems: 'center' }}>
+    <ScrollView style={{ flex: 1, backgroundColor: '#fff' }} showsVerticalScrollIndicator={false}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: top + 30, paddingBottom: 50, paddingHorizontal: 28, alignItems: 'center' }}>
         <Image
           source={require('../assets/icon.png')}
           style={{ width: 110, height: 110, borderRadius: 28, marginBottom: 16 }}
@@ -652,7 +668,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
         <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 16, textAlign: 'center' }}>Все скидки Казахстана в одном месте</Text>
       </View>
 
-      <View style={{ flex: 1, backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -24, padding: 28 }}>
+      <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -24, padding: 28 }}>
         <Text style={{ fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginBottom: 6 }}>Добро пожаловать! 👋</Text>
         <Text style={{ color: '#999', fontSize: 15, marginBottom: 28 }}>Войдите или создайте аккаунт</Text>
 
@@ -689,14 +705,18 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
         </TouchableOpacity>
 
         <Text style={{ color: '#ccc', fontSize: 12, textAlign: 'center' }}>Google вход только для покупателей</Text>
+
+        <View style={{ marginTop: 20, marginBottom: 20 }}>
+          <SocialLinks />
+        </View>
       </View>
-    </View>
+    </ScrollView>
   );
 
   // ===== LOGIN / REGISTER =====
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
-      <View style={{ backgroundColor: '#FF4500', paddingTop: 60, paddingBottom: 40, paddingHorizontal: 24, alignItems: 'center' }}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: top + 24, paddingBottom: 40, paddingHorizontal: 24, alignItems: 'center' }}>
         <Text style={{ fontSize: 32, fontWeight: '900', color: '#fff', letterSpacing: 4, marginBottom: 6 }}>O-GO</Text>
         <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15 }}>
           {selectedRole === 'buyer' ? '🛍 Покупатель' : '🏪 Продавец'}
@@ -704,7 +724,11 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
       </View>
 
       <ScrollView style={{ flex: 1, backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -24 }} contentContainerStyle={{ padding: 24 }}>
-        <TouchableOpacity onPress={() => setMode('choose')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24 }}>
+        <TouchableOpacity
+          onPress={() => setMode('choose')}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 24 }}
+        >
           <Ionicons name="arrow-back" size={20} color="#FF4500" />
           <Text style={{ color: '#FF4500', fontSize: 15, fontWeight: '600' }}>Назад</Text>
         </TouchableOpacity>
@@ -796,15 +820,15 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
                   if (!email || !password) return Alert.alert('Ошибка', 'Заполни все поля');
                   setLoading(true);
                   try {
-                    const approvedSnap = await getDoc(doc(db, 'approvedSellers', email));
+                    const approvedSnap = await getDoc(doc(db, 'approvedSellers', email.trim()));
                     if (!approvedSnap.exists()) {
                       setLoading(false);
                       return Alert.alert('⛔ Нет доступа', 'Регистрация продавца возможна только после одобрения заявки администратором O-GO.\n\nПодайте заявку через кнопку "Подать заявку на продавца".');
                     }
                     const approvedData = approvedSnap.data();
-                    const res = await createUserWithEmailAndPassword(auth, email, password);
+                    const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
                     await setDoc(doc(db, 'users', res.user.uid), {
-                      email, role: 'seller',
+                      email: email.trim(), role: 'seller',
                       storeName: approvedData.storeName,
                       storeAddress: approvedData.storeAddress,
                       storeCategory: approvedData.storeCategory,

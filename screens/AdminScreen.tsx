@@ -619,7 +619,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
                           <Image source={{ uri: p.bannerImage }} style={{ width: '100%', height: 140, borderRadius: 12 }} resizeMode="cover" /></>
                         ) : null}
                         {p.status === 'pending' && p.receiptImage ? (
-                          <><Text style={{ fontWeight: '700', color: '#FF9800', marginTop: 10, marginBottom: 4 }}>�� Чек об оплате:</Text>
+                          <><Text style={{ fontWeight: '700', color: '#FF9800', marginTop: 10, marginBottom: 4 }}>📸 Чек об оплате:</Text>
                           <Image source={{ uri: p.receiptImage }} style={{ width: '100%', height: 220, borderRadius: 12 }} resizeMode="contain" /></>
                         ) : null}
                         {p.status === 'pending' && (
@@ -656,7 +656,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontWeight: '700', color: '#1a1a1a' }} numberOfLines={1}>{d.title}</Text>
-                      <Text style={{ color: '#999', fontSize: 12 }}>🏪 {d.store} · �� {d.city}</Text>
+                      <Text style={{ color: '#999', fontSize: 12 }}>🏪 {d.store} · 📍 {d.city}</Text>
                       <Text style={{ color: '#FF4500', fontWeight: '700', fontSize: 13 }}>{Number(d.newPrice).toLocaleString()} ₸ · -{d.discount}% {d.isHidden ? '· скрыта' : ''}</Text>
                     </View>
                     <TouchableOpacity onPress={() => toggleDealHidden(d)} style={{ padding: 6 }}>

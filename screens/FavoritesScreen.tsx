@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -7,6 +8,7 @@ import { User } from 'firebase/auth';
 import { DealCard } from '../components/DealCard';
 
 export function FavoritesScreen({ user }: { user: User | null }) {
+  const insets = useSafeAreaInsets();
   const [favs, setFavs] = useState<any[]>([]);
 
   useEffect(() => {
@@ -30,8 +32,7 @@ export function FavoritesScreen({ user }: { user: User | null }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      {/* Шапка */}
-      <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 24, paddingHorizontal: 20 }}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: insets.top + 12, paddingBottom: 24, paddingHorizontal: 20 }}>
         <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800', marginBottom: 4 }}>❤️ Избранное</Text>
         <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 13 }}>
           {favs.length > 0 ? `${favs.length} сохранённых скидок` : 'Сохраняй лучшие скидки'}

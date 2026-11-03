@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
-import { CATEGORIES } from '../components/constants';
 import { styles } from '../components/styles';
-
 
 const CITY_COORDS: Record<string, { lat: number, lng: number }> = {
   'Алматы': { lat: 43.2220, lng: 76.8512 },
@@ -25,21 +24,63 @@ const CITY_COORDS: Record<string, { lat: number, lng: number }> = {
 
 const ALL_CITIES = ['Мой город', 'Все', 'Алматы', 'Астана', 'Шымкент', 'Актау', 'Актобе', 'Атырау', 'Павлодар', 'Караганда'];
 
+type CatKey = 'all' | 'food' | 'tech' | 'clothing' | 'shoes' | 'beauty';
+const MAP_CATS: { key: CatKey; name: string }[] = [
+  { key: 'all', name: 'Все' },
+  { key: 'food', name: '🍕 Еда' },
+  { key: 'tech', name: '📱 Техника' },
+  { key: 'clothing', name: '👕 Одежда' },
+  { key: 'shoes', name: '👟 Обувь' },
+  { key: 'beauty', name: '💄 Косметика' },
+];
+
+const matchCategory = (deal: any, key: CatKey): boolean => {
+  if (key === 'all') return true;
+  const c = String(deal.category || '').toLowerCase();
+  const isShoes = c.includes('обув') || (c === 'clothing' && deal.clothingType === 'shoes');
+  const isClothing = (c === 'clothing' && deal.clothingType !== 'shoes') || c.includes('одежд');
+  switch (key) {
+    case 'food': return c === 'food' || c.includes('еда');
+    case 'tech': return c === 'tech' || c.includes('техник');
+    case 'beauty': return c === 'beauty' || c.includes('космет');
+    case 'shoes': return isShoes;
+    case 'clothing': return isClothing && !isShoes;
+    default: return true;
+  }
+};
+
+const norm = (s?: string | null) => (s || '').trim().toLowerCase();
+
+// Стабильное смещение от строки (вместо Math.random)
+const hashOffset = (str: string) => {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  const a = ((h & 0xffff) / 0xffff) - 0.5;
+  const b = (((h >> 16) & 0xffff) / 0xffff) - 0.5;
+  return { dLat: a * 0.018, dLng: b * 0.018 };
+};
+
 export function MapScreen({ user, userCity }: { user: User | null, userCity?: string | null }) {
+  const insets = useSafeAreaInsets();
   const [location, setLocation] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState('Все');
+  const [selectedCategory, setSelectedCategory] = useState<CatKey>('all');
   const [selectedMapCity, setSelectedMapCity] = useState('Мой город');
   const [loading, setLoading] = useState(true);
-const [mapPromotions, setMapPromotions] = useState<string[]>([]);
+  const [mapPromotions, setMapPromotions] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({});
-        setLocation(loc.coords);
-      } else {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({});
+          setLocation(loc.coords);
+        } else {
+          const def = userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
+          setLocation({ latitude: def.lat, longitude: def.lng });
+        }
+      } catch {
         const def = userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
         setLocation({ latitude: def.lat, longitude: def.lng });
       }
@@ -52,55 +93,48 @@ const [mapPromotions, setMapPromotions] = useState<string[]>([]);
       setDeals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
   }, []);
-  
 
   useEffect(() => {
     return onSnapshot(collection(db, 'users'), snap => {
       const now = new Date().toISOString();
-      const highlighted = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter((u: any) => u.mapHighlighted && u.mapHighlightedUntil > now)
-        .map((u: any) => u.id);
-      setMapPromotions(highlighted);
+      setMapPromotions(
+        snap.docs
+          .map(d => ({ id: d.id, ...d.data() }))
+          .filter((u: any) => u.mapHighlighted && u.mapHighlightedUntil && u.mapHighlightedUntil > now)
+          .map((u: any) => u.id)
+      );
     });
   }, []);
 
   const filtered = deals
     .filter((d: any) => !d.isHidden)
     .filter((d: any) => {
-      if (selectedMapCity === 'Мой город') return !userCity || d.city === userCity;
+      if (selectedMapCity === 'Мой город') return !userCity || norm(d.city) === norm(userCity);
       if (selectedMapCity === 'Все') return true;
-      return d.city === selectedMapCity;
+      return norm(d.city) === norm(selectedMapCity);
     })
-    .filter((d: any) => selectedCategory === 'Все' || d.category === selectedCategory);
+    .filter((d: any) => matchCategory(d, selectedCategory));
 
-  const getCenter = () => {
-    if (selectedMapCity === 'Мой город' || selectedMapCity === 'Все') {
-      return userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
-    }
-    return CITY_COORDS[selectedMapCity] || CITY_COORDS['Алматы'];
-  };
+  const isMine = selectedMapCity === 'Мой город' || selectedMapCity === 'Все';
+  const baseCity = userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
+  const center = isMine ? baseCity : (CITY_COORDS[selectedMapCity] || CITY_COORDS['Алматы']);
+  const myLat = location?.latitude || baseCity.lat;
+  const myLng = location?.longitude || baseCity.lng;
+  const mapLat = isMine ? myLat : center.lat;
+  const mapLng = isMine ? myLng : center.lng;
 
-  const center = getCenter();
-  const centerLat = location?.latitude || center.lat;
-  const centerLng = location?.longitude || center.lng;
-  const mapLat = selectedMapCity === 'Мой город' || selectedMapCity === 'Все' ? centerLat : center.lat;
-  const mapLng = selectedMapCity === 'Мой город' || selectedMapCity === 'Все' ? centerLng : center.lng;
-
- // Группируем скидки по продавцу
-const sellerGroups: Record<string, any> = {};
-deals
-  .filter((d: any) => !d.isHidden)
-  .filter((d: any) => selectedCategory === 'Все' || d.category === selectedCategory)
-  .forEach((deal: any) => {
+  // Группируем скидки по продавцу
+  const sellerGroups: Record<string, any> = {};
+  filtered.forEach((deal: any) => {
     const key = deal.sellerId || deal.store;
     if (!sellerGroups[key]) {
       const c = CITY_COORDS[deal.city] || CITY_COORDS['Алматы'];
+      const off = hashOffset(String(key));
       sellerGroups[key] = {
         storeName: deal.store,
         city: deal.city,
-        lat: deal.lat || (c.lat + (Math.random() - 0.5) * 0.018),
-        lng: deal.lng || (c.lng + (Math.random() - 0.5) * 0.018),
+        lat: deal.lat || (c.lat + off.dLat),
+        lng: deal.lng || (c.lng + off.dLng),
         deals: [],
         isHighlighted: mapPromotions.includes(key),
       };
@@ -114,10 +148,9 @@ deals
     });
   });
 
-  const allMarkers = Object.values(sellerGroups).map((m: any) => ({
-    ...m,
-    isHighlighted: mapPromotions.includes(m.sellerId || Object.keys(sellerGroups).find(k => sellerGroups[k] === m) || ''),
-  }));
+  const allMarkers = Object.values(sellerGroups);
+  // Безопасно вставляем JSON в <script>
+  const markersJson = JSON.stringify(allMarkers).replace(/</g, '\\u003c');
 
   const html = `<!DOCTYPE html>
 <html>
@@ -129,71 +162,41 @@ deals
     * { margin: 0; padding: 0; }
     #map { width: 100vw; height: 100vh; }
     .cm { background: #FF4500; color: white; border: 2px solid white; border-radius: 20px; padding: 3px 8px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: pointer; }
-    .cm:hover { background: #cc3300; }
-    .pt { font-weight: bold; font-size: 14px; margin-bottom: 3px; }
-    .pp { color: #FF4500; font-weight: bold; font-size: 15px; }
-    .ps { color: #666; font-size: 12px; }
-    .pc { color: #999; font-size: 11px; }
-    .pb { background: #FF4500; color: white; border-radius: 6px; padding: 1px 5px; font-size: 11px; }
     .leaflet-control-attribution { display: none !important; }
-.leaflet-control-zoom { border: none !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; }
-.leaflet-control-zoom a { background: #fff !important; color: #FF4500 !important; font-weight: bold !important; border: none !important; }
-.leaflet-control-zoom a:hover { background: #FFF0EB !important; }
-.leaflet-popup-content-wrapper { border-radius: 14px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; border: none !important; padding: 4px !important; }
-.leaflet-popup-tip { background: #fff !important; }
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(255,215,0,0.7); }
-  70% { box-shadow: 0 0 0 15px rgba(255,215,0,0); }
-  100% { box-shadow: 0 0 0 0 rgba(255,215,0,0); }
-}
+    .leaflet-control-zoom { border: none !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; }
+    .leaflet-control-zoom a { background: #fff !important; color: #FF4500 !important; font-weight: bold !important; border: none !important; }
+    .leaflet-popup-content-wrapper { border-radius: 14px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; border: none !important; padding: 4px !important; }
+    .leaflet-popup-tip { background: #fff !important; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255,215,0,0.7); }
+      70% { box-shadow: 0 0 0 15px rgba(255,215,0,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,215,0,0); }
+    }
   </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
   var map = L.map('map').setView([${mapLat}, ${mapLng}], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: ''
-  }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '' }).addTo(map);
 
-// Убираем логотип Leaflet
-document.querySelector('.leaflet-control-attribution').style.display = 'none';
-
-  // Моя позиция
-  L.circleMarker([${centerLat}, ${centerLng}], {
+  L.circleMarker([${myLat}, ${myLng}], {
     radius: 10, fillColor: '#4285F4', color: '#fff', weight: 3, fillOpacity: 1
   }).addTo(map).bindPopup('<b>📍 Вы здесь</b>');
 
-  // Все маркеры всех городов
-  var allMarkers = ${JSON.stringify(allMarkers)};
-  var markerObjects = [];
+  var allMarkers = ${markersJson};
 
   allMarkers.forEach(function(m) {
-  var dealCount = m.deals.length;
-  var icon;
+    var dealCount = m.deals.length;
+    var icon;
 
-  if (m.isHighlighted) {
-    // Золотой выделенный маркер
-    icon = L.divIcon({
-      className: '',
-      html: '<div style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#fff;border:3px solid #fff;border-radius:50%;width:60px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,0.8),0 4px 15px rgba(0,0,0,0.3);animation:pulse 2s infinite"><span style="font-size:18px">⭐</span><span style="font-size:9px;font-weight:900">ТОП</span></div>',
-      iconAnchor: [30, 30]
-    });
-  } else if (dealCount === 1) {
-    icon = L.divIcon({
-      className: '',
-      html: '<div class="cm">-' + m.deals[0].discount + '%</div>',
-      iconAnchor: [20, 10]
-    });
-  } else {
-    icon = L.divIcon({
-      className: '',
-      html: '<div class="cm" style="border-radius:50%;width:36px;height:36px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0"><span style="font-size:13px;font-weight:900">' + dealCount + '</span><span style="font-size:8px;opacity:0.9">скид</span></div>',
-      iconAnchor: [18, 18]
-    });
-  }
-
-    if (dealCount === 1) {
+    if (m.isHighlighted) {
+      icon = L.divIcon({
+        className: '',
+        html: '<div style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#fff;border:3px solid #fff;border-radius:50%;width:60px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,0.8),0 4px 15px rgba(0,0,0,0.3);animation:pulse 2s infinite"><span style="font-size:18px">⭐</span><span style="font-size:9px;font-weight:900">ТОП</span></div>',
+        iconAnchor: [30, 30]
+      });
+    } else if (dealCount === 1) {
       icon = L.divIcon({
         className: '',
         html: '<div class="cm">-' + m.deals[0].discount + '%</div>',
@@ -207,7 +210,6 @@ document.querySelector('.leaflet-control-attribution').style.display = 'none';
       });
     }
 
-    // Попап со списком скидок и фото
     var dealsHtml = m.deals.slice(0, 5).map(function(d) {
       var imgHtml = d.imageUrl
         ? '<img src="' + d.imageUrl + '" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />'
@@ -218,8 +220,8 @@ document.querySelector('.leaflet-control-attribution').style.display = 'none';
         '<div style="flex:1;min-width:0">' +
           '<div style="font-weight:700;font-size:13px;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + d.title + '</div>' +
           '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">' +
-            '<span style="color:#FF4500;font-weight:800;font-size:14px">' + Number(d.newPrice).toLocaleString() + ' \u20B8</span>' +
-            (d.oldPrice ? '<span style="color:#aaa;font-size:11px;text-decoration:line-through">' + Number(d.oldPrice).toLocaleString() + ' \u20B8</span>' : '') +
+            '<span style="color:#FF4500;font-weight:800;font-size:14px">' + Number(d.newPrice).toLocaleString() + ' \\u20B8</span>' +
+            (d.oldPrice ? '<span style="color:#aaa;font-size:11px;text-decoration:line-through">' + Number(d.oldPrice).toLocaleString() + ' \\u20B8</span>' : '') +
             '<span style="background:#FF4500;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:800">-' + d.discount + '%</span>' +
           '</div>' +
         '</div>' +
@@ -246,9 +248,6 @@ document.querySelector('.leaflet-control-attribution').style.display = 'none';
       .addTo(map)
       .bindPopup(popup, { maxWidth: 280, minWidth: 260 });
   });
-
-  // Фильтрация по видимой области — показываем все маркеры всегда
-  // Маркеры уже в правильных городах
 </script>
 </body>
 </html>`;
@@ -263,7 +262,7 @@ document.querySelector('.leaflet-control-attribution').style.display = 'none';
   return (
     <View style={{ flex: 1 }}>
       {/* Выбор города */}
-      <View style={{ backgroundColor: '#FF4500', paddingVertical: 8 }}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: insets.top + 8, paddingBottom: 10 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12 }}>
           {ALL_CITIES.map(city => (
             <TouchableOpacity
@@ -282,20 +281,20 @@ document.querySelector('.leaflet-control-attribution').style.display = 'none';
       {/* Фильтр категорий */}
       <View style={{ backgroundColor: '#fff', elevation: 2 }}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8 }}>
-          {CATEGORIES.map(cat => (
+          {MAP_CATS.map(cat => (
             <TouchableOpacity
-              key={cat}
-              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginRight: 8, backgroundColor: selectedCategory === cat ? '#FF4500' : '#f0f0f0' }}
-              onPress={() => setSelectedCategory(cat)}
+              key={cat.key}
+              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, marginRight: 8, backgroundColor: selectedCategory === cat.key ? '#FF4500' : '#f0f0f0' }}
+              onPress={() => setSelectedCategory(cat.key)}
             >
-              <Text style={{ color: selectedCategory === cat ? '#fff' : '#333', fontWeight: '600', fontSize: 13 }}>{cat}</Text>
+              <Text style={{ color: selectedCategory === cat.key ? '#fff' : '#333', fontWeight: '600', fontSize: 13 }}>{cat.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
       <WebView
-        key={selectedMapCity + selectedCategory}
+        key={selectedMapCity + selectedCategory + filtered.length}
         source={{ html }}
         style={{ flex: 1 }}
         javaScriptEnabled

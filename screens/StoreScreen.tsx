@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDoc, getDocs, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { DealCard } from '../components/DealCard';
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function StoreScreen({ sellerId, user, onBack }: Props) {
+  const insets = useSafeAreaInsets();
   const [seller, setSeller] = useState<any>(null);
   const [deals, setDeals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,33 +34,28 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
       setDeals(myDeals);
       setLoading(false);
 
-      // Считаем средний рейтинг всех скидок
-      let totalRating = 0;
-      let totalCount = 0;
+      // Средний рейтинг: один раз читаем отзывы всех скидок
+      let sum = 0;
+      let count = 0;
       for (const deal of myDeals) {
-        const reviewsSnap = await onSnapshot(
-          collection(db, 'deals', deal.id, 'reviews'),
-          (reviewSnap) => {
-            const reviews = reviewSnap.docs.map(d => d.data());
-            reviews.forEach((r: any) => {
-              totalRating += r.rating;
-              totalCount++;
-            });
-            if (totalCount > 0) {
-              setAvgRating(totalRating / totalCount);
-              setTotalReviews(totalCount);
-            }
-          }
-        );
+        try {
+          const rs = await getDocs(collection(db, 'deals', deal.id, 'reviews'));
+          rs.docs.forEach(r => {
+            const rating = Number((r.data() as any).rating);
+            if (!isNaN(rating)) { sum += rating; count++; }
+          });
+        } catch {}
       }
+      setAvgRating(count > 0 ? sum / count : 0);
+      setTotalReviews(count);
     });
   }, [sellerId]);
 
-  const totalSavings = deals.reduce((sum, d) => sum + ((d.oldPrice || 0) - (d.newPrice || 0)), 0);
+  const totalSavings = deals.reduce((s, d) => s + ((d.oldPrice || 0) - (d.newPrice || 0)), 0);
   const avgDiscount = deals.length > 0
-    ? Math.round(deals.reduce((sum, d) => sum + (d.discount || 0), 0) / deals.length)
+    ? Math.round(deals.reduce((s, d) => s + (d.discount || 0), 0) / deals.length)
     : 0;
-  const totalViews = deals.reduce((sum, d) => sum + (d.viewCount || 0), 0);
+  const totalViews = deals.reduce((s, d) => s + (d.viewCount || 0), 0);
 
   if (loading) return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5', justifyContent: 'center', alignItems: 'center' }}>
@@ -69,10 +66,13 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Шапка */}
-        <View style={{ backgroundColor: '#FF4500', paddingTop: 54, paddingBottom: 40, paddingHorizontal: 20 }}>
-          <TouchableOpacity onPress={onBack} style={{ marginBottom: 16 }}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
+        <View style={{ backgroundColor: '#FF4500', paddingTop: insets.top + 12, paddingBottom: 40, paddingHorizontal: 20 }}>
+          <TouchableOpacity
+            onPress={onBack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ marginBottom: 16, alignSelf: 'flex-start' }}
+          >
+            <Ionicons name="arrow-back" size={26} color="#fff" />
           </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
             <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' }}>
@@ -97,7 +97,6 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
             </View>
           </View>
 
-          {/* Рейтинг */}
           {avgRating > 0 && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'flex-start' }}>
               <Ionicons name="star" size={16} color="#FFD700" />
@@ -107,8 +106,7 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
           )}
         </View>
 
-        {/* Статистика */}
-        <View style={{ marginHorizontal: 16, marginTop: -20, backgroundColor: '#fff', borderRadius: 20, padding: 16, elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10, marginBottom: 16 }}>
+        <View style={{ marginHorizontal: 16, marginTop: -20, backgroundColor: '#fff', borderRadius: 20, padding: 16, elevation: 4, marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1, alignItems: 'center', padding: 12, backgroundColor: '#FFF0EB', borderRadius: 16 }}>
               <Text style={{ fontSize: 24, fontWeight: '900', color: '#FF4500' }}>{deals.length}</Text>
@@ -129,7 +127,6 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
           </View>
         </View>
 
-        {/* Инфо */}
         {(seller?.storeAddress || seller?.storePhone || seller?.storeDescription) && (
           <View style={{ marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 20, padding: 16, marginBottom: 16 }}>
             {seller?.storeDescription && (
@@ -160,7 +157,6 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
           </View>
         )}
 
-        {/* Скидки */}
         <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
           <Text style={{ fontSize: 18, fontWeight: '800', color: '#1a1a1a', marginBottom: 12 }}>
             🏷 Активные скидки ({deals.length})

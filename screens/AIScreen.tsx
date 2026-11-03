@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Image, ActivityIndicator, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -21,6 +22,7 @@ const QUICK_PROMPTS = [
 ];
 
 export function AIScreen({ user, userCity }: { user: User | null, userCity?: string | null }) {
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<any[]>([
     {
       id: '1',
@@ -237,6 +239,7 @@ ${dealsContext}
           text: parsed.analysis,
           recommendations,
           totalMin: parsed.totalMin,
+          withinBudget: parsed.withinBudget,
           budget: budgetNum,
           alternatives: parsed.alternatives,
         },
@@ -417,7 +420,7 @@ ${dealsContext}
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
-      <View style={{ backgroundColor: '#FF4500', paddingTop: 16, paddingBottom: 16, paddingHorizontal: 16 }}>
+      <View style={{ backgroundColor: '#FF4500', paddingTop: insets.top + 10, paddingBottom: 16, paddingHorizontal: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}>
             <Text style={{ fontSize: 24 }}>🤖</Text>
