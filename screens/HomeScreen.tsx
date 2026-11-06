@@ -29,7 +29,6 @@ const CATS: { key: CatKey; name: string; icon: keyof typeof Ionicons.glyphMap; c
   { key: 'beauty', name: 'Косметика', icon: 'color-palette', color: '#A855F7' },
 ];
 
-// Проверка категории: понимает и новые значения (food), и старые (🍕 Еда)
 const matchCategory = (deal: any, key: CatKey): boolean => {
   if (key === 'all') return true;
   const c = String(deal.category || '').toLowerCase();
@@ -197,6 +196,7 @@ export function HomeScreen({ user, userCity, userRole }: {
   const [activeCategory, setActiveCategory] = useState<CatKey>('all');
   const [screenMode, setScreenMode] = useState<'home' | 'category' | 'search'>('home');
   const [activeBanners, setActiveBanners] = useState<any[]>([]);
+  const [selectedBanner, setSelectedBanner] = useState<any>(null); // открытый баннер
   const isFirstLoad = useRef(true);
   const dealsCountRef = useRef(0);
 
@@ -248,7 +248,6 @@ export function HomeScreen({ user, userCity, userRole }: {
   const homeDeals = cityDeals.length > 0 ? cityDeals : visibleDeals;
   const showingAllCities = !noCityFilter && cityDeals.length === 0 && visibleDeals.length > 0;
 
-  // Скидки выбранной категории
   const filtered = homeDeals
     .filter(d => matchCategory(d, activeCategory))
     .filter(d => activeCity === 'Все' || sameCity(d.city, activeCity))
@@ -265,6 +264,52 @@ export function HomeScreen({ user, userCity, userRole }: {
     setSortBy('new');
     setScreenMode('category');
   };
+
+  // ===== Окно с полноразмерным баннером =====
+  const bannerModal = (
+    <Modal
+      visible={!!selectedBanner}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setSelectedBanner(null)}
+    >
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
+        <TouchableOpacity
+          onPress={() => setSelectedBanner(null)}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={{ position: 'absolute', top: insets.top + 10, right: 16, zIndex: 100, width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}
+        >
+          <Ionicons name="close" size={26} color="#fff" />
+        </TouchableOpacity>
+
+        {selectedBanner?.storeName ? (
+          <View style={{ position: 'absolute', top: insets.top + 16, left: 16, right: 70, zIndex: 100 }}>
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }} numberOfLines={1}>
+              🏪 {selectedBanner.storeName}
+            </Text>
+          </View>
+        ) : null}
+
+        {selectedBanner?.bannerImage ? (
+          <Image
+            source={{ uri: selectedBanner.bannerImage }}
+            style={{ width: '100%', height: '80%' }}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={{ alignItems: 'center', paddingHorizontal: 32 }}>
+            <Text style={{ fontSize: 56, marginBottom: 12 }}>⚡</Text>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', textAlign: 'center' }}>
+              {selectedBanner?.storeName || 'Магазин'}
+            </Text>
+            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 8, textAlign: 'center' }}>
+              Продавец не добавил фото к баннеру
+            </Text>
+          </View>
+        )}
+      </View>
+    </Modal>
+  );
 
   // ===== Экран категории =====
   if (screenMode === 'category') {
@@ -385,6 +430,8 @@ export function HomeScreen({ user, userCity, userRole }: {
   // ===== Главный экран =====
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
+      {bannerModal}
+
       <View style={{ backgroundColor: '#FF4500', paddingTop: topPad, paddingBottom: 24, paddingHorizontal: 16 }}>
         <Text style={{ color: '#fff', fontSize: 28, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 }}>O-GO</Text>
         <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 15, textAlign: 'center', marginBottom: 16 }}>Все скидки в одном месте!</Text>
@@ -416,12 +463,13 @@ export function HomeScreen({ user, userCity, userRole }: {
           </View>
         </View>
 
-        {/* Платные баннеры продавцов */}
+        {/* Платные баннеры «Распродажа дня» — по нажатию открывается ФОТО баннера */}
         {activeBanners.map((banner: any) => (
           <TouchableOpacity
             key={banner.id}
+            activeOpacity={0.9}
             style={{ borderRadius: 20, marginBottom: 12, overflow: 'hidden', elevation: 4 }}
-            onPress={() => openCategory('all')}
+            onPress={() => setSelectedBanner(banner)}
           >
             {banner.bannerImage
               ? <>
@@ -434,7 +482,7 @@ export function HomeScreen({ user, userCity, userRole }: {
                       <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{banner.storeName || 'Магазин'}</Text>
                     </View>
                     <View style={{ backgroundColor: '#FF4500', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 }}>
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Смотреть →</Text>
+                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12 }}>Открыть</Text>
                     </View>
                   </View>
                 </>
@@ -447,7 +495,7 @@ export function HomeScreen({ user, userCity, userRole }: {
                     <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 12 }}>Специальные скидки только сегодня!</Text>
                   </View>
                   <View style={{ backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}>
-                    <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>Смотреть</Text>
+                    <Text style={{ color: '#FF4500', fontWeight: '800', fontSize: 13 }}>Открыть</Text>
                   </View>
                 </View>
             }

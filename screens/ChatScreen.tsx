@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc, getDoc, setDoc, increment } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 
@@ -15,7 +15,7 @@ interface Message {
   read: boolean;
 }
 
-export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle, buyerId, sellerId, isSeller, topInset = true, onBack }: {
+export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle, isSeller, topInset = true, onBack }: {
   user: User;
   chatId: string;
   otherUserId: string;
@@ -24,7 +24,7 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
   buyerId?: string;
   sellerId?: string;
   isSeller?: boolean;
-  topInset?: boolean; // false, если сверху уже есть панель «Назад»
+  topInset?: boolean;
   onBack: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -50,11 +50,15 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
       const msgs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Message));
       setMessages(msgs);
       setLoading(false);
-      msgs.forEach((msg: any) => {
-        if (msg.senderId !== user.uid && !msg.read) {
-          updateDoc(doc(db, 'chats', chatId, 'messages', msg.id), { read: true });
-        }
-      });
+
+      const incomingUnread = msgs.filter(m => m.senderId !== user.uid && !m.read);
+      if (incomingUnread.length > 0) {
+        incomingUnread.forEach(m => {
+          updateDoc(doc(db, 'chats', chatId, 'messages', m.id), { read: true }).catch(() => {});
+        });
+        // Я прочитал — обнуляем счётчик непрочитанных
+        setDoc(doc(db, 'chats', chatId), { unreadCount: 0 }, { merge: true }).catch(() => {});
+      }
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     });
   }, [chatId]);
@@ -63,26 +67,31 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
     if (!text.trim()) return;
     const msgText = text.trim();
     setText('');
+    const now = new Date().toISOString();
     try {
       await addDoc(collection(db, 'chats', chatId, 'messages'), {
         text: msgText,
         senderId: user.uid,
         senderEmail: user.email,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
         read: false,
       });
+
+      // Роли определяем по тому, кто пишет — а не по пропсам
+      const roleFields: any = isSeller
+        ? { sellerId: user.uid, buyerId: otherUserId }
+        : { buyerId: user.uid, sellerId: otherUserId, buyerEmail: user.email, sellerName: otherUserName };
+
       await setDoc(doc(db, 'chats', chatId), {
         participants: [user.uid, otherUserId],
         lastMessage: msgText,
-        lastMessageAt: new Date().toISOString(),
+        lastMessageAt: now,
         lastSenderId: user.uid,
         dealTitle: dealTitle || '',
-        buyerId: buyerId || user.uid,
-        sellerId: sellerId || otherUserId,
-        buyerEmail: user.email,
-        sellerName: otherUserName,
-        unreadCount: 1,
+        unreadCount: increment(1),
+        ...roleFields,
       }, { merge: true });
+
       await addDoc(collection(db, 'notifications'), {
         toUserId: otherUserId,
         type: 'new_message',
@@ -90,7 +99,7 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
         body: `${user.email?.split('@')[0]}: ${msgText}`,
         chatId,
         read: false,
-        createdAt: new Date().toISOString(),
+        createdAt: now,
       });
     } catch (e: any) { console.error(e); }
   };
@@ -146,9 +155,10 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
     );
   };
 
+  const headerName = otherProfile?.storeName || otherProfile?.buyerName || otherUserName;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#f5f5f5' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      {/* Шапка */}
       <View style={{ backgroundColor: '#FF4500', paddingTop: headerTop, paddingBottom: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <TouchableOpacity
           onPress={onBack}
@@ -164,16 +174,13 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
           }
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }} numberOfLines={1}>
-            {otherProfile?.storeName || otherUserName}
-          </Text>
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 16 }} numberOfLines={1}>{headerName}</Text>
           {dealTitle ? (
             <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }} numberOfLines={1}>📦 {dealTitle}</Text>
           ) : null}
         </View>
       </View>
 
-      {/* Сообщения */}
       {loading ? (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
           <ActivityIndicator size="large" color="#FF4500" />
@@ -198,7 +205,6 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
         />
       )}
 
-      {/* Быстрые ответы для продавца */}
       {isSeller && showQuickReplies && (
         <View style={{ backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingHorizontal: 12, paddingVertical: 8 }}>
           <Text style={{ color: '#999', fontSize: 12, marginBottom: 8, fontWeight: '600' }}>⚡ Быстрые ответы:</Text>
@@ -227,7 +233,6 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
         </View>
       )}
 
-      {/* Поле ввода */}
       <View style={{ backgroundColor: '#fff', paddingTop: 12, paddingHorizontal: 12, paddingBottom: bottomPad, flexDirection: 'row', alignItems: 'flex-end', gap: 10, borderTopWidth: 1, borderTopColor: '#f0f0f0' }}>
         {isSeller && (
           <TouchableOpacity

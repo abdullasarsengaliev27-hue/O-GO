@@ -51,7 +51,6 @@ const matchCategory = (deal: any, key: CatKey): boolean => {
 
 const norm = (s?: string | null) => (s || '').trim().toLowerCase();
 
-// Стабильное смещение от строки (вместо Math.random)
 const hashOffset = (str: string) => {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
@@ -68,22 +67,21 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
   const [selectedMapCity, setSelectedMapCity] = useState('Мой город');
   const [loading, setLoading] = useState(true);
   const [mapPromotions, setMapPromotions] = useState<string[]>([]);
+  const [is3D, setIs3D] = useState(true);
 
   useEffect(() => {
     (async () => {
+      const fallback = () => {
+        const def = userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
+        setLocation({ latitude: def.lat, longitude: def.lng });
+      };
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === 'granted') {
           const loc = await Location.getCurrentPositionAsync({});
           setLocation(loc.coords);
-        } else {
-          const def = userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
-          setLocation({ latitude: def.lat, longitude: def.lng });
-        }
-      } catch {
-        const def = userCity ? (CITY_COORDS[userCity] || CITY_COORDS['Алматы']) : CITY_COORDS['Алматы'];
-        setLocation({ latitude: def.lat, longitude: def.lng });
-      }
+        } else fallback();
+      } catch { fallback(); }
       setLoading(false);
     })();
   }, []);
@@ -123,7 +121,6 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
   const mapLat = isMine ? myLat : center.lat;
   const mapLng = isMine ? myLng : center.lng;
 
-  // Группируем скидки по продавцу
   const sellerGroups: Record<string, any> = {};
   filtered.forEach((deal: any) => {
     const key = deal.sellerId || deal.store;
@@ -148,106 +145,119 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
     });
   });
 
-  const allMarkers = Object.values(sellerGroups);
-  // Безопасно вставляем JSON в <script>
-  const markersJson = JSON.stringify(allMarkers).replace(/</g, '\\u003c');
+  const markersJson = JSON.stringify(Object.values(sellerGroups)).replace(/</g, '\\u003c');
 
   const html = `<!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"/>
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <style>
-    * { margin: 0; padding: 0; }
-    #map { width: 100vw; height: 100vh; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    #map { position: absolute; inset: 0; }
+    .maplibregl-ctrl-attrib { display: none !important; }
     .cm { background: #FF4500; color: white; border: 2px solid white; border-radius: 20px; padding: 3px 8px; font-weight: bold; font-size: 12px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,0.3); cursor: pointer; }
-    .leaflet-control-attribution { display: none !important; }
-    .leaflet-control-zoom { border: none !important; border-radius: 12px !important; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important; }
-    .leaflet-control-zoom a { background: #fff !important; color: #FF4500 !important; font-weight: bold !important; border: none !important; }
-    .leaflet-popup-content-wrapper { border-radius: 14px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; border: none !important; padding: 4px !important; }
-    .leaflet-popup-tip { background: #fff !important; }
+    .maplibregl-popup-content { border-radius: 14px !important; box-shadow: 0 4px 20px rgba(0,0,0,0.2) !important; padding: 4px !important; }
+    .maplibregl-popup-close-button { font-size: 20px; color: #fff; padding: 2px 8px; z-index: 5; }
     @keyframes pulse {
       0% { box-shadow: 0 0 0 0 rgba(255,215,0,0.7); }
       70% { box-shadow: 0 0 0 15px rgba(255,215,0,0); }
       100% { box-shadow: 0 0 0 0 rgba(255,215,0,0); }
     }
+    #err { display:none; position:absolute; top:50%; left:0; right:0; text-align:center; font-family:sans-serif; color:#999; padding:20px; }
   </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="err">Не удалось загрузить 3D-карту.<br>Проверь интернет.</div>
 <script>
-  var map = L.map('map').setView([${mapLat}, ${mapLng}], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '' }).addTo(map);
+  if (typeof maplibregl === 'undefined') {
+    document.getElementById('err').style.display = 'block';
+  } else {
+    var map = new maplibregl.Map({
+      container: 'map',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [${mapLng}, ${mapLat}],
+      zoom: 15.2,
+      pitch: ${is3D ? 60 : 0},
+      bearing: ${is3D ? -17 : 0},
+      maxPitch: 75,
+      attributionControl: false
+    });
 
-  L.circleMarker([${myLat}, ${myLng}], {
-    radius: 10, fillColor: '#4285F4', color: '#fff', weight: 3, fillOpacity: 1
-  }).addTo(map).bindPopup('<b>📍 Вы здесь</b>');
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
 
-  var allMarkers = ${markersJson};
+    // Моя позиция
+    var me = document.createElement('div');
+    me.style.cssText = 'width:20px;height:20px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 0 0 6px rgba(66,133,244,0.25)';
+    new maplibregl.Marker({ element: me })
+      .setLngLat([${myLng}, ${myLat}])
+      .setPopup(new maplibregl.Popup({ offset: 14 }).setHTML('<b style="padding:6px;display:block">📍 Вы здесь</b>'))
+      .addTo(map);
 
-  allMarkers.forEach(function(m) {
-    var dealCount = m.deals.length;
-    var icon;
+    var allMarkers = ${markersJson};
 
-    if (m.isHighlighted) {
-      icon = L.divIcon({
-        className: '',
-        html: '<div style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#fff;border:3px solid #fff;border-radius:50%;width:60px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,0.8),0 4px 15px rgba(0,0,0,0.3);animation:pulse 2s infinite"><span style="font-size:18px">⭐</span><span style="font-size:9px;font-weight:900">ТОП</span></div>',
-        iconAnchor: [30, 30]
-      });
-    } else if (dealCount === 1) {
-      icon = L.divIcon({
-        className: '',
-        html: '<div class="cm">-' + m.deals[0].discount + '%</div>',
-        iconAnchor: [20, 10]
-      });
-    } else {
-      icon = L.divIcon({
-        className: '',
-        html: '<div class="cm" style="border-radius:50%;width:48px;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0"><span style="font-size:16px;font-weight:900">' + dealCount + '</span><span style="font-size:9px;opacity:0.9">скидок</span></div>',
-        iconAnchor: [24, 24]
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
       });
     }
 
-    var dealsHtml = m.deals.slice(0, 5).map(function(d) {
-      var imgHtml = d.imageUrl
-        ? '<img src="' + d.imageUrl + '" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />'
-        : '<div style="width:48px;height:48px;border-radius:8px;background:#FFF0EB;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🏷</div>';
+    allMarkers.forEach(function(m) {
+      var dealCount = m.deals.length;
+      var el = document.createElement('div');
 
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f5">' +
-        imgHtml +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-weight:700;font-size:13px;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + d.title + '</div>' +
-          '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">' +
-            '<span style="color:#FF4500;font-weight:800;font-size:14px">' + Number(d.newPrice).toLocaleString() + ' \\u20B8</span>' +
-            (d.oldPrice ? '<span style="color:#aaa;font-size:11px;text-decoration:line-through">' + Number(d.oldPrice).toLocaleString() + ' \\u20B8</span>' : '') +
-            '<span style="background:#FF4500;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:800">-' + d.discount + '%</span>' +
+      if (m.isHighlighted) {
+        el.innerHTML = '<div style="background:linear-gradient(135deg,#FFD700,#FFA500);color:#fff;border:3px solid #fff;border-radius:50%;width:60px;height:60px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,0.8),0 4px 15px rgba(0,0,0,0.3);animation:pulse 2s infinite"><span style="font-size:18px">⭐</span><span style="font-size:9px;font-weight:900">ТОП</span></div>';
+      } else if (dealCount === 1) {
+        el.innerHTML = '<div class="cm">-' + esc(m.deals[0].discount) + '%</div>';
+      } else {
+        el.innerHTML = '<div class="cm" style="border-radius:50%;width:48px;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0"><span style="font-size:16px;font-weight:900">' + dealCount + '</span><span style="font-size:9px;opacity:0.9">скидок</span></div>';
+      }
+
+      var dealsHtml = m.deals.slice(0, 5).map(function(d) {
+        var imgHtml = d.imageUrl
+          ? '<img src="' + esc(d.imageUrl) + '" style="width:48px;height:48px;border-radius:8px;object-fit:cover;flex-shrink:0" />'
+          : '<div style="width:48px;height:48px;border-radius:8px;background:#FFF0EB;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🏷</div>';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f5f5f5">' +
+          imgHtml +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:700;font-size:13px;color:#1a1a1a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(d.title) + '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-top:3px">' +
+              '<span style="color:#FF4500;font-weight:800;font-size:14px">' + Number(d.newPrice).toLocaleString() + ' \\u20B8</span>' +
+              (d.oldPrice ? '<span style="color:#aaa;font-size:11px;text-decoration:line-through">' + Number(d.oldPrice).toLocaleString() + ' \\u20B8</span>' : '') +
+              '<span style="background:#FF4500;color:#fff;border-radius:6px;padding:2px 6px;font-size:11px;font-weight:800">-' + esc(d.discount) + '%</span>' +
+            '</div>' +
           '</div>' +
-        '</div>' +
-      '</div>';
-    }).join('');
+        '</div>';
+      }).join('');
 
-    var moreHtml = m.deals.length > 5
-      ? '<div style="text-align:center;padding:8px;color:#FF4500;font-size:12px;font-weight:700">+ ещё ' + (m.deals.length - 5) + ' скидок</div>'
-      : '';
+      var moreHtml = m.deals.length > 5
+        ? '<div style="text-align:center;padding:8px;color:#FF4500;font-size:12px;font-weight:700">+ ещё ' + (m.deals.length - 5) + ' скидок</div>'
+        : '';
 
-    var minD = Math.min.apply(null, m.deals.map(function(d) { return d.discount; }));
-    var maxD = Math.max.apply(null, m.deals.map(function(d) { return d.discount; }));
-    var range = minD === maxD ? '-' + minD + '%' : '-' + minD + '% до -' + maxD + '%';
+      var minD = Math.min.apply(null, m.deals.map(function(d) { return d.discount; }));
+      var maxD = Math.max.apply(null, m.deals.map(function(d) { return d.discount; }));
+      var range = minD === maxD ? '-' + minD + '%' : '-' + minD + '% до -' + maxD + '%';
 
-    var popup =
-      '<div style="background:linear-gradient(135deg,#FF4500,#FF6B35);padding:12px 14px;margin:-4px -4px 0;border-radius:10px 10px 0 0">' +
-        '<div style="color:#fff;font-weight:800;font-size:15px">🏪 ' + m.storeName + '</div>' +
-        '<div style="color:rgba(255,255,255,0.85);font-size:11px;margin-top:3px">📍 ' + m.city + ' &nbsp;·&nbsp; ' + dealCount + ' скидок &nbsp;·&nbsp; ⚡ ' + range + '</div>' +
-      '</div>' +
-      '<div style="padding:4px 14px">' + dealsHtml + '</div>' +
-      moreHtml;
+      var popupHtml =
+        '<div style="width:250px;font-family:-apple-system,Roboto,sans-serif">' +
+          '<div style="background:linear-gradient(135deg,#FF4500,#FF6B35);padding:12px 14px;margin:-4px -4px 0;border-radius:10px 10px 0 0">' +
+            '<div style="color:#fff;font-weight:800;font-size:15px;padding-right:18px">🏪 ' + esc(m.storeName) + '</div>' +
+            '<div style="color:rgba(255,255,255,0.85);font-size:11px;margin-top:3px">📍 ' + esc(m.city) + ' · ' + dealCount + ' скидок · ⚡ ' + range + '</div>' +
+          '</div>' +
+          '<div style="padding:4px 10px">' + dealsHtml + '</div>' +
+          moreHtml +
+        '</div>';
 
-    L.marker([m.lat, m.lng], { icon: icon })
-      .addTo(map)
-      .bindPopup(popup, { maxWidth: 280, minWidth: 260 });
-  });
+      new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([m.lng, m.lat])
+        .setPopup(new maplibregl.Popup({ offset: 24, maxWidth: '280px' }).setHTML(popupHtml))
+        .addTo(map);
+    });
+  }
 </script>
 </body>
 </html>`;
@@ -294,12 +304,24 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
       </View>
 
       <WebView
-        key={selectedMapCity + selectedCategory + filtered.length}
+        key={selectedMapCity + selectedCategory + filtered.length + (is3D ? '3d' : '2d')}
         source={{ html }}
         style={{ flex: 1 }}
         javaScriptEnabled
+        domStorageEnabled
         originWhitelist={['*']}
+        nestedScrollEnabled
       />
+
+      {/* Переключатель 2D / 3D */}
+      <TouchableOpacity
+        onPress={() => setIs3D(v => !v)}
+        activeOpacity={0.85}
+        style={{ position: 'absolute', top: insets.top + 110, left: 12, backgroundColor: is3D ? '#FF4500' : '#fff', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 9, elevation: 5, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+      >
+        <Ionicons name="cube-outline" size={18} color={is3D ? '#fff' : '#FF4500'} />
+        <Text style={{ color: is3D ? '#fff' : '#FF4500', fontWeight: '800', fontSize: 14 }}>{is3D ? '3D' : '2D'}</Text>
+      </TouchableOpacity>
 
       <View style={{ position: 'absolute', bottom: 20, alignSelf: 'center', backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, elevation: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Ionicons name="location" size={18} color="#FF4500" />

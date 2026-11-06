@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, getDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { ChatScreen } from './ChatScreen';
@@ -10,29 +10,59 @@ export function BuyerChatsScreen({ user }: { user: User }) {
   const [chats, setChats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedChat, setSelectedChat] = useState<any>(null);
+  const [profiles, setProfiles] = useState<Record<string, any>>({});
 
   useEffect(() => {
     const q = query(collection(db, 'chats'), where('participants', 'array-contains', user.uid));
     return onSnapshot(q, snap => {
-      setChats(snap.docs.map(d => ({ id: d.id, ...d.data() }))
-        .sort((a: any, b: any) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime()));
+      setChats(
+        snap.docs
+          .map(d => {
+            const c: any = { id: d.id, ...d.data() };
+            c.otherId = (c.participants || []).find((p: string) => p !== user.uid) || null;
+            return c;
+          })
+          .filter(c => c.otherId)
+          .sort((a, b) => new Date(b.lastMessageAt || 0).getTime() - new Date(a.lastMessageAt || 0).getTime())
+      );
       setLoading(false);
-    });
+    }, () => setLoading(false));
   }, [user]);
+
+  useEffect(() => {
+    const ids = Array.from(new Set(chats.map(c => c.otherId))).filter(id => !profiles[id]);
+    if (ids.length === 0) return;
+    (async () => {
+      const found: Record<string, any> = {};
+      for (const id of ids) {
+        try {
+          const s = await getDoc(doc(db, 'users', id));
+          found[id] = s.exists() ? s.data() : {};
+        } catch { found[id] = {}; }
+      }
+      setProfiles(p => ({ ...p, ...found }));
+    })();
+  }, [chats]);
+
+  const nameOf = (chat: any) => {
+    const p = profiles[chat.otherId] || {};
+    return p.storeName || p.buyerName || chat.sellerName || 'Продавец';
+  };
 
   if (selectedChat) return (
     <ChatScreen
       user={user}
       chatId={selectedChat.id}
-      otherUserId={selectedChat.sellerId}
-      otherUserName={selectedChat.sellerName || 'Продавец'}
+      otherUserId={selectedChat.otherId}
+      otherUserName={nameOf(selectedChat)}
       dealTitle={selectedChat.dealTitle}
       topInset={false}
       onBack={() => setSelectedChat(null)}
     />
   );
 
-  const unreadCount = chats.filter(c => c.unreadCount > 0 && c.lastSenderId !== user.uid).length;
+  const isUnread = (c: any) => c.unreadCount > 0 && c.lastSenderId !== user.uid;
+  const unreadCount = chats.filter(isUnread).length;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
@@ -70,7 +100,7 @@ export function BuyerChatsScreen({ user }: { user: User }) {
                 </Text>
               </View>
             ) : chats.map(chat => {
-              const hasUnread = chat.unreadCount > 0 && chat.lastSenderId !== user.uid;
+              const hasUnread = isUnread(chat);
               const time = chat.lastMessageAt
                 ? new Date(chat.lastMessageAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
                 : '';
@@ -78,27 +108,13 @@ export function BuyerChatsScreen({ user }: { user: User }) {
                 <TouchableOpacity
                   key={chat.id}
                   onPress={() => setSelectedChat(chat)}
-                  style={{
-                    backgroundColor: '#fff',
-                    borderRadius: 20,
-                    padding: 14,
-                    marginBottom: 10,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                    elevation: 2,
-                    borderWidth: hasUnread ? 2 : 0,
-                    borderColor: '#FF4500',
-                  }}
+                  style={{ backgroundColor: '#fff', borderRadius: 20, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12, elevation: 2, borderWidth: hasUnread ? 2 : 0, borderColor: '#FF4500' }}
                 >
                   <View style={{ width: 54, height: 54, borderRadius: 18, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
                     <Ionicons name="storefront" size={26} color="#FF4500" />
                   </View>
-
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 2 }}>
-                      {chat.sellerName || 'Продавец'}
-                    </Text>
+                    <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 15, marginBottom: 2 }}>{nameOf(chat)}</Text>
                     {chat.dealTitle ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3 }}>
                         <Ionicons name="pricetag" size={11} color="#FF4500" />
@@ -106,10 +122,9 @@ export function BuyerChatsScreen({ user }: { user: User }) {
                       </View>
                     ) : null}
                     <Text style={{ color: hasUnread ? '#1a1a1a' : '#999', fontSize: 13, fontWeight: hasUnread ? '600' : '400' }} numberOfLines={1}>
-                      {chat.lastMessage || 'Начни общение'}
+                      {chat.lastSenderId === user.uid ? 'Вы: ' : ''}{chat.lastMessage || 'Начни общение'}
                     </Text>
                   </View>
-
                   <View style={{ alignItems: 'flex-end', gap: 6 }}>
                     <Text style={{ color: '#ccc', fontSize: 11 }}>{time}</Text>
                     {hasUnread ? (
