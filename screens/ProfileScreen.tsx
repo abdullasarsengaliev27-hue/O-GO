@@ -19,6 +19,7 @@ import { AdminScreen } from './AdminScreen';
 import { KaspiSettingsScreen } from './seller/KaspiSettingsScreen';
 import { BuyerChatsScreen } from './BuyerChatsScreen';
 import { PromotionScreen } from './seller/PromotionScreen';
+import { PrivacyPolicyScreen } from './PrivacyPolicyScreen';
 import { SocialLinks } from '../components/SocialLinks';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -42,6 +43,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   const [buyerPhone, setBuyerPhone] = useState('');
   const [buyerCity, setBuyerCity] = useState('');
   const [agreedToPolicy, setAgreedToPolicy] = useState(false);
+  const [sellerAgreed, setSellerAgreed] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [screen, setScreen] = useState<ScreenType>('profile');
   const [sellerProfile, setSellerProfile] = useState<any>(null);
@@ -173,6 +176,13 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     }
   };
 
+  // Окно политики конфиденциальности (используется в продавце)
+  const policyModal = (
+    <Modal visible={showPolicy} animationType="slide" onRequestClose={() => setShowPolicy(false)}>
+      <PrivacyPolicyScreen onClose={() => setShowPolicy(false)} />
+    </Modal>
+  );
+
   // ===== ЗАЛОГИНЕН =====
   if (user) {
     if (screen === 'add') return <View style={{ flex: 1 }}><BackBtn /><AddDealScreen user={user} /></View>;
@@ -188,6 +198,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
 
     // ----- Профиль продавца -----
     if (userRole === 'seller') return (
+      <>
       <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
         <View style={{ backgroundColor: '#FF4500', paddingTop: top + 16, paddingBottom: 40, paddingHorizontal: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
@@ -355,6 +366,18 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
             <Ionicons name="chevron-forward" size={18} color="#ccc" />
           </TouchableOpacity>
 
+          {/* Политика конфиденциальности (продавец) */}
+          <TouchableOpacity style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2 }} onPress={() => setShowPolicy(true)}>
+            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' }}>
+              <Ionicons name="document-text" size={22} color="#3B82F6" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Политика конфиденциальности</Text>
+              <Text style={{ color: '#999', fontSize: 12 }}>Обработка персональных данных</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#ccc" />
+          </TouchableOpacity>
+
           <SocialLinks />
 
           <TouchableOpacity style={{ backgroundColor: '#FFF0EB', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }} onPress={() => signOut(auth)}>
@@ -363,6 +386,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      {policyModal}
+      </>
     );
 
     // ----- Профиль покупателя -----
@@ -765,6 +790,34 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
           />
         )}
 
+        {/* Согласие продавца с политикой конфиденциальности */}
+        {selectedRole === 'seller' && (
+          <>
+            <TouchableOpacity
+              onPress={() => setSellerAgreed(!sellerAgreed)}
+              activeOpacity={0.8}
+              style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, backgroundColor: sellerAgreed ? '#F0FFF4' : '#f8f8f8', borderRadius: 14, padding: 14, borderWidth: 1.5, borderColor: sellerAgreed ? '#22C55E' : '#f0f0f0', marginBottom: 14 }}
+            >
+              <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: sellerAgreed ? '#22C55E' : '#fff', borderWidth: 2, borderColor: sellerAgreed ? '#22C55E' : '#ddd', justifyContent: 'center', alignItems: 'center', marginTop: 1 }}>
+                {sellerAgreed && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#1a1a1a', fontSize: 13, lineHeight: 20 }}>
+                  Я согласен с{' '}
+                  <Text
+                    style={{ color: '#FF4500', fontWeight: '700', textDecorationLine: 'underline' }}
+                    onPress={() => setShowPolicy(true)}
+                  >
+                    Политикой конфиденциальности
+                  </Text>
+                  {' '}и даю согласие на обработку персональных данных
+                </Text>
+              </View>
+            </TouchableOpacity>
+            {policyModal}
+          </>
+        )}
+
         {loading ? <ActivityIndicator size="large" color="#FF4500" style={{ marginTop: 20 }} /> : (
           <>
             <TouchableOpacity
@@ -818,6 +871,9 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
                 style={{ backgroundColor: '#fff', borderRadius: 16, paddingVertical: 16, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500', marginBottom: 12 }}
                 onPress={async () => {
                   if (!email || !password) return Alert.alert('Ошибка', 'Заполни все поля');
+                  if (!sellerAgreed) {
+                    return Alert.alert('Ошибка', 'Необходимо принять политику конфиденциальности и согласие на обработку персональных данных');
+                  }
                   setLoading(true);
                   try {
                     const approvedSnap = await getDoc(doc(db, 'approvedSellers', email.trim()));
@@ -837,6 +893,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
                       storeLogo: approvedData.storeLogo || null,
                       city: approvedData.city,
                       isApproved: true,
+                      agreedToPolicy: true,
+                      policyAcceptedAt: new Date().toISOString(),
                       createdAt: new Date().toISOString(),
                     });
                     Alert.alert('✅ Добро пожаловать!', 'Ваш кабинет продавца готов!');
