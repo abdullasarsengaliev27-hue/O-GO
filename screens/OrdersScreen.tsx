@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
@@ -81,10 +83,44 @@ function StatusProgress({ status, deliveryInfo }: { status: string, deliveryInfo
   );
 }
 
+// Сжимает фото и возвращает base64
+async function pickAndCompressPhoto(): Promise<string | null> {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== 'granted') { Alert.alert('Нет доступа к фото'); return null; }
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: false,
+    quality: 0.8,
+  });
+  if (result.canceled) return null;
+  try {
+    const resized = await ImageManipulator.manipulateAsync(
+      result.assets[0].uri,
+      [{ resize: { width: 800 } }],
+      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    const response = await fetch(resized.uri);
+    const blob = await response.blob();
+    const reader = new FileReader();
+    return await new Promise<string>((resolve, reject) => {
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Не удалось прочитать фото'));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    Alert.alert('Ошибка', 'Не удалось обработать фото. Попробуй другое.');
+    return null;
+  }
+}
+
 function BuyerOrderCard({ order }: { order: any }) {
   const status = order.status as string;
   const info = STATUS_INFO[status] || STATUS_INFO['pending'];
   const [showProblemChat, setShowProblemChat] = useState(false);
+  const [showPhoto, setShowPhoto] = useState(false);
+
+  const hasPackedInfo = ['packed', 'sent', 'delivered', 'buyer_confirmed'].includes(status)
+    && (order.packagingPhoto || order.courierPhone || order.deliveryDate || order.deliveryNote);
 
   return (
     <View style={{ backgroundColor: '#fff', borderRadius: 20, marginBottom: 14, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10 }}>
@@ -128,8 +164,49 @@ function BuyerOrderCard({ order }: { order: any }) {
 
         <StatusProgress status={status} deliveryInfo={{ deliveryDate: order.deliveryDate, deliveryNote: order.deliveryNote }} />
 
+        {/* Отчёт продавца об упаковке */}
+        {hasPackedInfo && (
+          <View style={{ backgroundColor: '#FFF8E1', borderRadius: 14, padding: 12, marginTop: 4, borderWidth: 1, borderColor: '#FFE082' }}>
+            <Text style={{ fontWeight: '800', color: '#E65100', fontSize: 14, marginBottom: 8 }}>📦 Продавец упаковал товар</Text>
+
+            {order.packagingPhoto ? (
+              <TouchableOpacity onPress={() => setShowPhoto(true)} activeOpacity={0.9} style={{ marginBottom: 10 }}>
+                <Image source={{ uri: order.packagingPhoto }} style={{ width: '100%', height: 190, borderRadius: 12 }} resizeMode="cover" />
+                <View style={{ position: 'absolute', right: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 8, padding: 5 }}>
+                  <Ionicons name="expand" size={16} color="#fff" />
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
+            {order.courierPhone ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Ionicons name="call" size={18} color="#E65100" />
+                <View>
+                  <Text style={{ color: '#E65100', fontWeight: '700', fontSize: 12 }}>Телефон курьера</Text>
+                  <Text style={{ color: '#BF360C', fontSize: 15, fontWeight: '800' }}>{order.courierPhone}</Text>
+                </View>
+              </View>
+            ) : null}
+            {order.deliveryDate ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Ionicons name="calendar" size={18} color="#E65100" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#E65100', fontWeight: '700', fontSize: 12 }}>Когда приедет курьер</Text>
+                  <Text style={{ color: '#BF360C', fontSize: 14, fontWeight: '700' }}>{order.deliveryDate}</Text>
+                </View>
+              </View>
+            ) : null}
+            {order.deliveryNote ? (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                <Ionicons name="chatbubble-ellipses" size={18} color="#E65100" />
+                <Text style={{ color: '#BF360C', fontSize: 13, flex: 1 }}>{order.deliveryNote}</Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
         {status === 'sent' && order.courierPhone && (
-          <View style={{ backgroundColor: '#F3E5F5', borderRadius: 12, padding: 12, marginTop: 4, gap: 6 }}>
+          <View style={{ backgroundColor: '#F3E5F5', borderRadius: 12, padding: 12, marginTop: 8, gap: 6 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Ionicons name="call" size={18} color="#9C27B0" />
               <View>
@@ -265,6 +342,22 @@ function BuyerOrderCard({ order }: { order: any }) {
           <Text style={{ color: '#ccc', fontSize: 11 }}>{order.createdAt ? new Date(order.createdAt).toLocaleDateString('ru-RU') : ''}</Text>
         </View>
       </View>
+
+      {/* Фото упаковки на весь экран */}
+      <Modal visible={showPhoto} transparent animationType="fade" onRequestClose={() => setShowPhoto(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity
+            onPress={() => setShowPhoto(false)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={{ position: 'absolute', top: 60, right: 16, zIndex: 10, width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}
+          >
+            <Ionicons name="close" size={26} color="#fff" />
+          </TouchableOpacity>
+          {order.packagingPhoto ? (
+            <Image source={{ uri: order.packagingPhoto }} style={{ width: '100%', height: '75%' }} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -277,19 +370,38 @@ function SellerOrderCard({ order }: { order: any }) {
   const [courierPhone, setCourierPhone] = useState(order.courierPhone || '');
   const [deliveryDate, setDeliveryDate] = useState(order.deliveryDate || '');
   const [deliveryNote, setDeliveryNote] = useState(order.deliveryNote || '');
+  const [packagingPhoto, setPackagingPhoto] = useState<string | null>(order.packagingPhoto || null);
+  const [photoLoading, setPhotoLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(status === 'pending' || status === 'awaiting_payment_confirmation');
 
+  const isDeliveryStep = nextStatus === 'packed' || nextStatus === 'sent';
+  const isSentStep = nextStatus === 'sent';
+
+  const addPhoto = async () => {
+    setPhotoLoading(true);
+    const photo = await pickAndCompressPhoto();
+    if (photo) setPackagingPhoto(photo);
+    setPhotoLoading(false);
+  };
+
   const updateStatus = async () => {
     if (!nextStatus) return;
-    if (nextStatus === 'sent' && !courierPhone.trim()) return Alert.alert('Ошибка', 'Введите номер телефона курьера');
-    if (nextStatus === 'sent' && !deliveryDate.trim()) return Alert.alert('Ошибка', 'Укажите дату/время доставки');
+    if (isSentStep && !courierPhone.trim()) return Alert.alert('Ошибка', 'Введите номер телефона курьера');
+    if (isSentStep && !deliveryDate.trim()) return Alert.alert('Ошибка', 'Укажите дату/время доставки');
+    if (isSentStep && !packagingPhoto) return Alert.alert('Добавьте фото упаковки', 'Покупатель должен увидеть, как упакован его товар.');
     setLoading(true);
     try {
+      const now = new Date().toISOString();
       await updateDoc(doc(db, 'orders', order.id), {
         status: nextStatus,
-        ...(nextStatus === 'sent' ? { courierPhone, deliveryDate, deliveryNote } : {}),
-        updatedAt: new Date().toISOString(),
+        ...(isDeliveryStep ? {
+          courierPhone: courierPhone.trim(),
+          deliveryDate: deliveryDate.trim(),
+          deliveryNote: deliveryNote.trim(),
+          ...(packagingPhoto ? { packagingPhoto, packagingPhotoAt: order.packagingPhotoAt || now } : {}),
+        } : {}),
+        updatedAt: now,
       });
     } catch (e: any) { Alert.alert('Ошибка', e.message); }
     setLoading(false);
@@ -372,26 +484,57 @@ function SellerOrderCard({ order }: { order: any }) {
             </View>
           )}
 
-          {nextStatus === 'sent' && (
+          {/* Информация о доставке + фото упаковки (шаги «Упакован» и «Передан курьеру») */}
+          {isDeliveryStep && (
             <View style={{ marginBottom: 14 }}>
-              <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 14, marginBottom: 12 }}>🚚 Информация о доставке</Text>
-              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📱 Телефон курьера *</Text>
+              <Text style={{ fontWeight: '800', color: '#1a1a1a', fontSize: 14, marginBottom: 12 }}>
+                {isSentStep ? '🚚 Информация о доставке' : '📦 Упаковка и доставка'}
+              </Text>
+
+              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📱 Телефон курьера{isSentStep ? ' *' : ''}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 12 }}>
                 <Ionicons name="call-outline" size={18} color="#aaa" style={{ marginRight: 8 }} />
                 <TextInput style={{ flex: 1, paddingVertical: 12, fontSize: 15 }} placeholder="+7 777 123 45 67" value={courierPhone} onChangeText={setCourierPhone} keyboardType="phone-pad" placeholderTextColor="#ccc" />
               </View>
-              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📅 Когда приедет курьер *</Text>
+
+              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📅 Когда приедет курьер{isSentStep ? ' *' : ''}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 12 }}>
                 <Ionicons name="calendar-outline" size={18} color="#aaa" style={{ marginRight: 8 }} />
                 <TextInput style={{ flex: 1, paddingVertical: 12, fontSize: 15 }} placeholder="Завтра 15 сентября, 14:00-16:00" value={deliveryDate} onChangeText={setDeliveryDate} placeholderTextColor="#ccc" />
               </View>
+
               <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>💬 Сообщение покупателю</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#f8f8f8', borderRadius: 12, paddingHorizontal: 14, borderWidth: 1.5, borderColor: '#eee', marginBottom: 12 }}>
                 <Ionicons name="chatbubble-outline" size={18} color="#aaa" style={{ marginRight: 8, marginTop: 10 }} />
                 <TextInput style={{ flex: 1, paddingVertical: 10, fontSize: 14, minHeight: 60 }} placeholder="Курьер позвонит за 30 минут..." value={deliveryNote} onChangeText={setDeliveryNote} multiline placeholderTextColor="#ccc" />
               </View>
+
+              <Text style={{ fontWeight: '600', color: '#555', fontSize: 13, marginBottom: 6 }}>📸 Фото упаковки{isSentStep ? ' *' : ''}</Text>
+              {packagingPhoto ? (
+                <View style={{ marginBottom: 8 }}>
+                  <Image source={{ uri: packagingPhoto }} style={{ width: '100%', height: 180, borderRadius: 12 }} resizeMode="cover" />
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 8 }}>
+                    <TouchableOpacity onPress={addPhoto}><Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 13 }}>🔄 Заменить фото</Text></TouchableOpacity>
+                    <TouchableOpacity onPress={() => setPackagingPhoto(null)}><Text style={{ color: '#f44336', fontSize: 13 }}>✕ Удалить</Text></TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={addPhoto}
+                  disabled={photoLoading}
+                  style={{ height: 110, borderRadius: 14, backgroundColor: '#f8f8f8', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FF4500', borderStyle: 'dashed', marginBottom: 8 }}
+                >
+                  {photoLoading ? <ActivityIndicator color="#FF4500" /> : (
+                    <>
+                      <Ionicons name="camera" size={30} color="#FF4500" />
+                      <Text style={{ color: '#FF4500', fontWeight: '700', marginTop: 6 }}>Добавить фото упаковки</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
               <View style={{ backgroundColor: '#E8F5E9', borderRadius: 10, padding: 10 }}>
-                <Text style={{ color: '#22C55E', fontSize: 12 }}>💡 Покупатель увидит эту информацию в заказах</Text>
+                <Text style={{ color: '#22C55E', fontSize: 12 }}>💡 Покупатель увидит фото и эту информацию в своих заказах</Text>
               </View>
             </View>
           )}

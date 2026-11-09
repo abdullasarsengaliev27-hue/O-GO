@@ -21,6 +21,7 @@ import { BuyerChatsScreen } from './BuyerChatsScreen';
 import { PromotionScreen } from './seller/PromotionScreen';
 import { PrivacyPolicyScreen } from './PrivacyPolicyScreen';
 import { SocialLinks } from '../components/SocialLinks';
+import { isBadgeActive, fmtDate } from '../utils/verification';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
@@ -197,7 +198,9 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     if (screen === 'buyerChats') return <View style={{ flex: 1 }}><BackBtn /><BuyerChatsScreen user={user} /></View>;
 
     // ----- Профиль продавца -----
-    if (userRole === 'seller') return (
+    if (userRole === 'seller') {
+      const badgeOn = isBadgeActive(sellerProfile);
+      return (
       <>
       <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
         <View style={{ backgroundColor: '#FF4500', paddingTop: top + 16, paddingBottom: 40, paddingHorizontal: 20 }}>
@@ -215,9 +218,16 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
               </View>
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 4 }}>
-                {sellerProfile?.storeName || user.email?.split('@')[0]}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', flexShrink: 1 }} numberOfLines={2}>
+                  {sellerProfile?.storeName || user.email?.split('@')[0]}
+                </Text>
+                {badgeOn && (
+                  <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="checkmark-circle" size={22} color="#1D9BF0" />
+                  </View>
+                )}
+              </View>
               <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                 <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
                   <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>🏪 Продавец</Text>
@@ -228,6 +238,29 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
               </View>
             </View>
           </View>
+
+          {/* Значок подтверждённого бизнеса */}
+          {badgeOn ? (
+            <View style={{ backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', marginBottom: 14 }}>
+              <Ionicons name="checkmark-circle" size={20} color="#1D9BF0" />
+              <View>
+                <Text style={{ color: '#1D9BF0', fontWeight: '800', fontSize: 13 }}>Подтверждённый бизнес</Text>
+                <Text style={{ color: '#888', fontSize: 11 }}>
+                  {sellerProfile?.verifiedFree ? 'Навсегда' : `Действует до ${fmtDate(sellerProfile?.verifiedUntil)}`}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => setScreen('promotion')}
+              style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' }}
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>
+                {sellerProfile?.verifiedUntil ? 'Значок закончился · продлить' : 'Получить значок подтверждения'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {sellerProfile?.storeAddress && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 }}>
@@ -350,7 +383,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Продвижение</Text>
-              <Text style={{ color: '#999', fontSize: 12 }}>Турбо-буст, баннер, карта</Text>
+              <Text style={{ color: '#999', fontSize: 12 }}>Турбо-буст, баннер, карта, значок</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#ccc" />
           </TouchableOpacity>
@@ -388,7 +421,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
       </ScrollView>
       {policyModal}
       </>
-    );
+      );
+    }
 
     // ----- Профиль покупателя -----
     return (
@@ -497,7 +531,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
               onPress={() => {
                 Alert.alert('🆘 Поддержка и жалобы', 'Выберите тему обращения:', [
                   { text: '❌ Неработающая скидка', onPress: () => sendSupport('Неработающая скидка') },
-                  { text: '💰 Неверная цена', onPress: () => sendSupport('Неверная цена') },
+                  { text: '�� Неверная цена', onPress: () => sendSupport('Неверная цена') },
                   { text: '🏪 Закрытый магазин', onPress: () => sendSupport('Закрытый магазин') },
                   { text: '📋 Недостоверная информация', onPress: () => sendSupport('Недостоверная информация') },
                   { text: 'Отмена', style: 'cancel' },

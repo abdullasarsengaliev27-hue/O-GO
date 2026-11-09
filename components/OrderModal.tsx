@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, Modal, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Clipboard } from 'react-native';
+import { View, Text, Modal, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -7,6 +7,8 @@ import { User } from 'firebase/auth';
 import { styles } from './styles';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Clipboard from 'expo-clipboard';
+import { compressToBase64 } from '../utils/imageToBase64';
 
 type PaymentMethod = 'cash' | 'kaspi';
 
@@ -26,6 +28,7 @@ export function OrderModal({ deal, user, visible, onClose }: {
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [receiptBusy, setReceiptBusy] = useState(false);
   const [sellerKaspi, setSellerKaspi] = useState<{ phone: string, name: string } | null>(null);
 
   const hasSizes = deal?.sizes && deal.sizes.length > 0;
@@ -64,61 +67,43 @@ export function OrderModal({ deal, user, visible, onClose }: {
     setStep(3);
   };
 
+  // Любое фото чека -> сжатый base64 (~до 420 КБ)
+  const processReceipt = async (uri: string) => {
+    setReceiptBusy(true);
+    try {
+      setReceiptImage(await compressToBase64(uri, { maxWidth: 1280, maxBytes: 420 * 1024 }));
+    } catch (e: any) {
+      Alert.alert('Ошибка', e.message || 'Не удалось обработать фото');
+    }
+    setReceiptBusy(false);
+  };
+
   const pickReceipt = async (fromCamera = false) => {
     if (fromCamera) {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') return Alert.alert('Нет доступа к камере');
-      const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-      if (!result.canceled) {
-        const uri = result.assets[0].uri;
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        const base64 = await new Promise<string>(resolve => {
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-        setReceiptImage(base64);
-      }
+      const result = await ImagePicker.launchCameraAsync({ quality: 1 });
+      if (!result.canceled) await processReceipt(result.assets[0].uri);
     } else {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') return Alert.alert('Нет доступа к фото');
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsEditing: false, quality: 0.8,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false, quality: 1,
       });
-      if (!result.canceled) {
-        const uri = result.assets[0].uri;
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        const reader = new FileReader();
-        const base64 = await new Promise<string>(resolve => {
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-        setReceiptImage(base64);
-      }
+      if (!result.canceled) await processReceipt(result.assets[0].uri);
     }
   };
 
   const pickReceiptFile = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
+        type: ['image/*'],
         copyToCacheDirectory: true,
       });
       if (result.canceled) return;
-      const uri = result.assets[0].uri;
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const reader = new FileReader();
-      const base64 = await new Promise<string>(resolve => {
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-      });
-      setReceiptImage(base64);
-      Alert.alert('✅ Файл загружен!', result.assets[0].name);
-    } catch (e) {
+      await processReceipt(result.assets[0].uri);
+    } catch {
       Alert.alert('Ошибка', 'Не удалось загрузить файл');
     }
   };
@@ -194,7 +179,10 @@ export function OrderModal({ deal, user, visible, onClose }: {
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
       <View style={{ flex: 1, backgroundColor: '#f5f5f5' }}>
         <View style={{ backgroundColor: '#FF4500', padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <TouchableOpacity onPress={step > 1 ? () => setStep(s => (s - 1) as any) : handleClose}>
+          <TouchableOpacity
+            onPress={step > 1 ? () => setStep(s => (s - 1) as any) : handleClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
             <Ionicons name={step > 1 ? 'arrow-back' : 'close'} size={26} color="#fff" />
           </TouchableOpacity>
           <Text style={{ color: '#fff', fontSize: 17, fontWeight: 'bold' }}>
@@ -205,7 +193,7 @@ export function OrderModal({ deal, user, visible, onClose }: {
 
         <StepIndicator />
 
-        <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
 
           {/* ШАГ 1 */}
           {step === 1 && (
@@ -300,7 +288,6 @@ export function OrderModal({ deal, user, visible, onClose }: {
           {/* ШАГ 3 */}
           {step === 3 && (
             <>
-              {/* Итог */}
               <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16 }}>
                 <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 16, marginBottom: 12 }}>🧾 Итог заказа</Text>
                 <View style={{ gap: 6 }}>
@@ -308,8 +295,8 @@ export function OrderModal({ deal, user, visible, onClose }: {
                     <Text style={{ color: '#666' }}>Товар:</Text>
                     <Text style={{ fontWeight: 'bold', color: '#222', flex: 1, textAlign: 'right' }} numberOfLines={1}>{deal?.title}</Text>
                   </View>
-                  {selectedSize && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#666' }}>Размер:</Text><Text style={{ fontWeight: 'bold' }}>{selectedSize}</Text></View>}
-                  {selectedColor && <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#666' }}>Цвет:</Text><Text style={{ fontWeight: 'bold' }}>{selectedColor}</Text></View>}
+                  {selectedSize ? <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#666' }}>Размер:</Text><Text style={{ fontWeight: 'bold' }}>{selectedSize}</Text></View> : null}
+                  {selectedColor ? <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={{ color: '#666' }}>Цвет:</Text><Text style={{ fontWeight: 'bold' }}>{selectedColor}</Text></View> : null}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <Text style={{ color: '#666' }}>Адрес:</Text>
                     <Text style={{ fontWeight: 'bold', flex: 1, textAlign: 'right' }} numberOfLines={2}>{fullAddress}</Text>
@@ -322,11 +309,9 @@ export function OrderModal({ deal, user, visible, onClose }: {
                 </View>
               </View>
 
-              {/* Способ оплаты */}
               <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16 }}>
                 <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 16, marginBottom: 12 }}>💳 Способ оплаты</Text>
 
-                {/* Наличными */}
                 <TouchableOpacity
                   onPress={() => setPaymentMethod('cash')}
                   style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, borderWidth: 2, borderColor: paymentMethod === 'cash' ? '#FF4500' : '#eee', marginBottom: 10, backgroundColor: paymentMethod === 'cash' ? '#FFF0EB' : '#fff' }}
@@ -340,7 +325,6 @@ export function OrderModal({ deal, user, visible, onClose }: {
                   </View>
                 </TouchableOpacity>
 
-                {/* Kaspi перевод */}
                 <TouchableOpacity
                   onPress={() => {
                     if (!sellerKaspi) return Alert.alert('⚠️', 'Продавец не указал реквизиты Kaspi. Используйте оплату при получении.');
@@ -358,7 +342,6 @@ export function OrderModal({ deal, user, visible, onClose }: {
                 </TouchableOpacity>
               </View>
 
-              {/* Реквизиты Kaspi */}
               {paymentMethod === 'kaspi' && sellerKaspi && (
                 <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16 }}>
                   <Text style={{ fontWeight: 'bold', color: '#222', fontSize: 15, marginBottom: 12 }}>📱 Реквизиты для перевода</Text>
@@ -370,8 +353,8 @@ export function OrderModal({ deal, user, visible, onClose }: {
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                       <Text style={{ fontWeight: 'bold', color: '#FF4500', fontSize: 18 }}>{sellerKaspi.phone}</Text>
                       <TouchableOpacity
-                        onPress={() => {
-                          Clipboard.setString(sellerKaspi.phone);
+                        onPress={async () => {
+                          await Clipboard.setStringAsync(sellerKaspi.phone);
                           Alert.alert('✅ Скопировано!', sellerKaspi.phone);
                         }}
                         style={{ backgroundColor: '#FF4500', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}
@@ -386,45 +369,54 @@ export function OrderModal({ deal, user, visible, onClose }: {
                     <Text style={{ color: '#4CAF50', fontSize: 13 }}>
                       1. Переведи <Text style={{ fontWeight: 'bold' }}>{Number(deal?.newPrice).toLocaleString()} ₸</Text> на номер выше{'\n'}
                       2. Сделай скриншот чека{'\n'}
-                      3. Загрузи скриншот ниже
+                      3. Загрузи скриншот ниже (любой размер)
                     </Text>
                   </View>
 
-                  {/* Загрузка чека */}
                   <Text style={[styles.label, { color: '#f44336' }]}>📸 Скриншот/фото чека об оплате *</Text>
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-  <TouchableOpacity
-    onPress={() => pickReceipt(false)}
-    style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500' }}
-  >
-    <Ionicons name="image" size={24} color="#FF4500" />
-    <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 12, marginTop: 4 }}>Галерея</Text>
-  </TouchableOpacity>
-  <TouchableOpacity
-    onPress={() => pickReceipt(true)}
-    style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500' }}
-  >
-    <Ionicons name="camera" size={24} color="#FF4500" />
-    <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 12, marginTop: 4 }}>Камера</Text>
-  </TouchableOpacity>
-  <TouchableOpacity
-    onPress={pickReceiptFile}
-    style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500' }}
-  >
-    <Ionicons name="document" size={24} color="#FF4500" />
-    <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 12, marginTop: 4 }}>Файл</Text>
-  </TouchableOpacity>
-</View>
+                    <TouchableOpacity
+                      onPress={() => pickReceipt(false)}
+                      disabled={receiptBusy}
+                      style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500' }}
+                    >
+                      <Ionicons name="image" size={24} color="#FF4500" />
+                      <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 12, marginTop: 4 }}>Галерея</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => pickReceipt(true)}
+                      disabled={receiptBusy}
+                      style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500' }}
+                    >
+                      <Ionicons name="camera" size={24} color="#FF4500" />
+                      <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 12, marginTop: 4 }}>Камера</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={pickReceiptFile}
+                      disabled={receiptBusy}
+                      style={{ flex: 1, backgroundColor: '#FFF0EB', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 2, borderColor: '#FF4500' }}
+                    >
+                      <Ionicons name="document" size={24} color="#FF4500" />
+                      <Text style={{ color: '#FF4500', fontWeight: '600', fontSize: 12, marginTop: 4 }}>Файл</Text>
+                    </TouchableOpacity>
+                  </View>
 
-{receiptImage && (
-  <View style={{ marginBottom: 8 }}>
-    <Image source={{ uri: receiptImage }} style={{ width: '100%', height: 200, borderRadius: 10 }} resizeMode="contain" />
-    <TouchableOpacity onPress={() => setReceiptImage(null)} style={{ marginTop: 6 }}>
-      <Text style={{ color: '#f44336', textAlign: 'center', fontSize: 13 }}>✕ Удалить и загрузить другой</Text>
-    </TouchableOpacity>
-  </View>
-)}
-{!receiptImage && (
+                  {receiptBusy && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginVertical: 8 }}>
+                      <ActivityIndicator color="#FF4500" />
+                      <Text style={{ color: '#999', fontSize: 13 }}>Обрабатываем фото...</Text>
+                    </View>
+                  )}
+
+                  {receiptImage && !receiptBusy && (
+                    <View style={{ marginBottom: 8 }}>
+                      <Image source={{ uri: receiptImage }} style={{ width: '100%', height: 200, borderRadius: 10 }} resizeMode="contain" />
+                      <TouchableOpacity onPress={() => setReceiptImage(null)} style={{ marginTop: 6 }}>
+                        <Text style={{ color: '#f44336', textAlign: 'center', fontSize: 13 }}>✕ Удалить и загрузить другой</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                  {!receiptImage && !receiptBusy && (
                     <View style={{ backgroundColor: '#FFF9E6', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#FFD700' }}>
                       <Text style={{ color: '#666', fontSize: 12 }}>⚠️ Без чека заказ не будет принят продавцом</Text>
                     </View>
@@ -432,7 +424,6 @@ export function OrderModal({ deal, user, visible, onClose }: {
                 </View>
               )}
 
-              {/* Гарантия */}
               <View style={{ backgroundColor: '#E8F5E9', borderRadius: 12, padding: 12, marginBottom: 16 }}>
                 <Text style={{ color: '#4CAF50', fontWeight: 'bold', marginBottom: 6 }}>🛡 Гарантия O-GO</Text>
                 <Text style={{ color: '#555', fontSize: 13 }}>✓ Продавец сразу получит уведомление</Text>
@@ -442,7 +433,11 @@ export function OrderModal({ deal, user, visible, onClose }: {
 
               {loading
                 ? <ActivityIndicator size="large" color="#FF4500" />
-                : <TouchableOpacity style={styles.bigBtn} onPress={placeOrder}>
+                : <TouchableOpacity
+                    style={[styles.bigBtn, receiptBusy && { opacity: 0.5 }]}
+                    onPress={placeOrder}
+                    disabled={receiptBusy}
+                  >
                     <Text style={styles.bigBtnText}>
                       {paymentMethod === 'kaspi' ? '📱 Отправить заказ с чеком' : '✅ Оформить заказ'}
                     </Text>

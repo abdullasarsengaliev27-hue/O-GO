@@ -7,6 +7,7 @@ import { User } from 'firebase/auth';
 import { ReviewModal } from './ReviewModal';
 import { OrderModal } from './OrderModal';
 import { BookingModal } from './BookingModal';
+import { VerifiedBadge, useSellerVerified } from './VerifiedBadge';
 import { ChatScreen } from '../screens/ChatScreen';
 
 export function DealCard({ item, user, onStorePress, userRole }: {
@@ -24,8 +25,8 @@ export function DealCard({ item, user, onStorePress, userRole }: {
   const [showFullMenu, setShowFullMenu] = useState(false);
   const [showFullImage, setShowFullImage] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const sellerVerified = useSellerVerified(item.sellerId);
 
-  // Высота фото зависит от формата
   const imageHeight = (() => {
     const aspect = item.imageAspect;
     if (!aspect) return 220;
@@ -83,7 +84,7 @@ export function DealCard({ item, user, onStorePress, userRole }: {
         elevation: 4,
         overflow: 'hidden',
       }}>
-        {/* ===== ФОТО + всё, что поверх него ===== */}
+        {/* ФОТО */}
         <View style={{ width: '100%', height: imageHeight, backgroundColor: '#f8f8f8' }}>
           <TouchableOpacity
             style={{ width: '100%', height: '100%' }}
@@ -98,23 +99,19 @@ export function DealCard({ item, user, onStorePress, userRole }: {
             }
           </TouchableOpacity>
 
-          {/* Затемнение снизу — только на фото */}
           <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: 'rgba(0,0,0,0.35)' }} />
 
-          {/* Бейдж скидки */}
           <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: '#FF4500', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="flash" size={13} color="#fff" />
             <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>-{item.discount}%</Text>
           </View>
 
-          {/* Турбо-буст */}
           {isBoosted && (
             <View style={{ position: 'absolute', top: 12, left: 90, backgroundColor: '#FFD700', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 5 }}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>🚀 ТОП</Text>
             </View>
           )}
 
-          {/* Избранное — только покупателям */}
           {user && userRole !== 'seller' && (
             <TouchableOpacity
               onPress={toggleFav}
@@ -124,14 +121,12 @@ export function DealCard({ item, user, onStorePress, userRole }: {
             </TouchableOpacity>
           )}
 
-          {/* Иконка полноэкранного просмотра */}
           {item.imageUrl && (
             <View pointerEvents="none" style={{ position: 'absolute', bottom: 48, right: 12, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 8, padding: 5 }}>
               <Ionicons name="expand" size={16} color="#fff" />
             </View>
           )}
 
-          {/* Цены поверх фото */}
           <View pointerEvents="none" style={{ position: 'absolute', bottom: 10, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 22 }}>
@@ -151,7 +146,7 @@ export function DealCard({ item, user, onStorePress, userRole }: {
           </View>
         </View>
 
-        {/* ===== КОНТЕНТ ===== */}
+        {/* КОНТЕНТ */}
         <View style={{ padding: 14 }}>
           <Text style={{ color: '#FF4500', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' }}>
             {item.category}
@@ -169,13 +164,14 @@ export function DealCard({ item, user, onStorePress, userRole }: {
               <Text style={{ color: '#999', fontSize: 12 }}>({reviewCount})</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}
               onPress={() => item.sellerId && onStorePress?.(item.sellerId)}
             >
               <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
                 <Ionicons name="storefront" size={13} color="#FF4500" />
               </View>
-              <Text style={{ color: '#FF4500', fontSize: 12, fontWeight: '600' }}>{item.store}</Text>
+              <Text style={{ color: '#FF4500', fontSize: 12, fontWeight: '600', flexShrink: 1 }} numberOfLines={1}>{item.store}</Text>
+              {sellerVerified && <VerifiedBadge size={16} />}
             </TouchableOpacity>
           </View>
 
@@ -260,7 +256,6 @@ export function DealCard({ item, user, onStorePress, userRole }: {
 
           <View style={{ height: 1, backgroundColor: '#f0f0f0', marginBottom: 12 }} />
 
-          {/* Кнопки */}
           <View style={{ gap: 8 }}>
             {user && user.uid !== item.sellerId && item.hasDelivery && (
               <TouchableOpacity
@@ -310,8 +305,6 @@ export function DealCard({ item, user, onStorePress, userRole }: {
               otherUserId={item.sellerId}
               otherUserName={item.store}
               dealTitle={item.title}
-              buyerId={user.uid}
-              sellerId={item.sellerId}
               onBack={() => setActiveChatId(null)}
             />
           </Modal>

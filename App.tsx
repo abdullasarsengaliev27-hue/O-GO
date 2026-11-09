@@ -25,8 +25,8 @@ export default function App() {
   const [userRole, setUserRole] = useState('');
   const [userCity, setUserCity] = useState<string | null>(null);
   const [appReady, setAppReady] = useState(false);
-  const [cityLoaded, setCityLoaded] = useState(false);
-  const [onboardingDone, setOnboardingDone] = useState(true);
+  const [initLoaded, setInitLoaded] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -34,9 +34,9 @@ export default function App() {
         const city = await AsyncStorage.getItem('selectedCity');
         setUserCity(city);
         const onboarding = await AsyncStorage.getItem('onboardingDone');
-        setOnboardingDone(!!onboarding);
+        setOnboardingDone(onboarding === 'true');
       } catch {}
-      setCityLoaded(true);
+      setInitLoaded(true);
     };
     init();
   }, []);
@@ -53,11 +53,7 @@ export default function App() {
             return;
           }
           const snap = await getDoc(doc(db, 'users', u.uid));
-          if (snap.exists()) {
-            setUserRole(snap.data().role || 'buyer');
-          } else {
-            setUserRole('buyer');
-          }
+          setUserRole(snap.exists() ? (snap.data().role || 'buyer') : 'buyer');
         } catch {
           setUserRole('buyer');
         }
@@ -69,11 +65,17 @@ export default function App() {
     });
   }, []);
 
-  if (!appReady || !cityLoaded) return (
+  const handleCitySelect = async (city: string) => {
+    try { await AsyncStorage.setItem('selectedCity', city); } catch {}
+    setUserCity(city);
+  };
+
+  // Загрузка
+  if (!appReady || !initLoaded) return (
     <View style={{ flex: 1, backgroundColor: '#FF4500', justifyContent: 'center', alignItems: 'center' }}>
       <Image
         source={require('./assets/icon.png')}
-        style={{ width: 140, height: 140, borderRadius: 36, marginBottom: 24, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 20 }}
+        style={{ width: 140, height: 140, borderRadius: 36, marginBottom: 24 }}
         resizeMode="cover"
       />
       <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.85)', marginBottom: 60 }}>Все скидки в одном месте</Text>
@@ -82,23 +84,24 @@ export default function App() {
     </View>
   );
 
-  if (appReady && user && userRole === '') return (
+  if (user && userRole === '') return (
     <View style={{ flex: 1, backgroundColor: '#FF4500', justifyContent: 'center', alignItems: 'center' }}>
       <ActivityIndicator size="large" color="#fff" />
       <Text style={{ color: '#fff', marginTop: 16, fontSize: 14 }}>Загрузка профиля...</Text>
     </View>
   );
 
-  // Онбординг при первом запуске
+  // 1. Онбординг (первый запуск)
   if (!onboardingDone) return (
     <OnboardingScreen onDone={() => setOnboardingDone(true)} />
   );
 
-  // Выбор города
-  if (cityLoaded && !userCity) return (
-    <CitySelectScreen onSelect={(city) => setUserCity(city)} />
+  // 2. Выбор города
+  if (!userCity) return (
+    <CitySelectScreen onSelect={handleCitySelect} />
   );
 
+  // 3. Приложение
   return (
     <NavigationContainer>
       <Tab.Navigator

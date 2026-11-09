@@ -6,6 +6,8 @@ import { collection, query, where, onSnapshot, getDoc, getDocs, doc } from 'fire
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { DealCard } from '../components/DealCard';
+import { VerifiedBadge } from '../components/VerifiedBadge';
+import { isBadgeActive } from '../utils/verification';
 
 interface Props {
   sellerId: string;
@@ -34,7 +36,6 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
       setDeals(myDeals);
       setLoading(false);
 
-      // Средний рейтинг: один раз читаем отзывы всех скидок
       let sum = 0;
       let count = 0;
       for (const deal of myDeals) {
@@ -51,6 +52,7 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
     });
   }, [sellerId]);
 
+  const verified = isBadgeActive(seller);
   const totalSavings = deals.reduce((s, d) => s + ((d.oldPrice || 0) - (d.newPrice || 0)), 0);
   const avgDiscount = deals.length > 0
     ? Math.round(deals.reduce((s, d) => s + (d.discount || 0), 0) / deals.length)
@@ -82,9 +84,12 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
               }
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', marginBottom: 4 }}>
-                {seller?.storeName || 'Магазин'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Text style={{ color: '#fff', fontSize: 22, fontWeight: '800', flexShrink: 1 }} numberOfLines={2}>
+                  {seller?.storeName || 'Магазин'}
+                </Text>
+                {verified && <Ionicons name="checkmark-circle" size={22} color="#fff" />}
+              </View>
               <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
                 {seller?.storeCategory || 'Магазин'}
               </Text>
@@ -97,13 +102,20 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
             </View>
           </View>
 
-          {avgRating > 0 && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'flex-start' }}>
-              <Ionicons name="star" size={16} color="#FFD700" />
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{avgRating.toFixed(1)}</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>({totalReviews} отзывов)</Text>
-            </View>
-          )}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            {verified && (
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7 }}>
+                <VerifiedBadge size={18} label />
+              </View>
+            )}
+            {avgRating > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
+                <Ionicons name="star" size={16} color="#FFD700" />
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>{avgRating.toFixed(1)}</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>({totalReviews} отзывов)</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={{ marginHorizontal: 16, marginTop: -20, backgroundColor: '#fff', borderRadius: 20, padding: 16, elevation: 4, marginBottom: 16 }}>
