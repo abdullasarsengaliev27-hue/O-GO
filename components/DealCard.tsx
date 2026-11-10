@@ -8,6 +8,7 @@ import { ReviewModal } from './ReviewModal';
 import { OrderModal } from './OrderModal';
 import { BookingModal } from './BookingModal';
 import { VerifiedBadge, useSellerVerified } from './VerifiedBadge';
+import { ImageGallery } from './ImageGallery';
 import { ChatScreen } from '../screens/ChatScreen';
 
 export function DealCard({ item, user, onStorePress, userRole }: {
@@ -23,9 +24,15 @@ export function DealCard({ item, user, onStorePress, userRole }: {
   const [showOrder, setShowOrder] = useState(false);
   const [showBooking, setShowBooking] = useState(false);
   const [showFullMenu, setShowFullMenu] = useState(false);
-  const [showFullImage, setShowFullImage] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const sellerVerified = useSellerVerified(item.sellerId);
+
+  // Все фото товара: главное + дополнительные (старые скидки — только главное)
+  const allImages: string[] = [
+    ...(item.imageUrl ? [item.imageUrl] : []),
+    ...(Array.isArray(item.extraImages) ? item.extraImages.filter(Boolean) : []),
+  ];
 
   const imageHeight = (() => {
     const aspect = item.imageAspect;
@@ -84,11 +91,11 @@ export function DealCard({ item, user, onStorePress, userRole }: {
         elevation: 4,
         overflow: 'hidden',
       }}>
-        {/* ФОТО */}
+        {/* ФОТО (главное) */}
         <View style={{ width: '100%', height: imageHeight, backgroundColor: '#f8f8f8' }}>
           <TouchableOpacity
             style={{ width: '100%', height: '100%' }}
-            onPress={() => item.imageUrl && setShowFullImage(true)}
+            onPress={() => allImages.length > 0 && setShowGallery(true)}
             activeOpacity={0.95}
           >
             {item.imageUrl
@@ -121,11 +128,17 @@ export function DealCard({ item, user, onStorePress, userRole }: {
             </TouchableOpacity>
           )}
 
-          {item.imageUrl && (
+          {/* Значок: сколько всего фото */}
+          {allImages.length > 1 ? (
+            <View pointerEvents="none" style={{ position: 'absolute', bottom: 48, right: 12, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="images" size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{allImages.length}</Text>
+            </View>
+          ) : item.imageUrl ? (
             <View pointerEvents="none" style={{ position: 'absolute', bottom: 48, right: 12, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 8, padding: 5 }}>
               <Ionicons name="expand" size={16} color="#fff" />
             </View>
-          )}
+          ) : null}
 
           <View pointerEvents="none" style={{ position: 'absolute', bottom: 10, left: 12, right: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -310,21 +323,14 @@ export function DealCard({ item, user, onStorePress, userRole }: {
           </Modal>
         )}
 
-        {showFullImage && (
-          <Modal visible={showFullImage} transparent animationType="fade" onRequestClose={() => setShowFullImage(false)}>
-            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
-              <TouchableOpacity
-                onPress={() => setShowFullImage(false)}
-                style={{ position: 'absolute', top: 54, right: 16, zIndex: 100, width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' }}
-              >
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-              <View style={{ position: 'absolute', top: 60, left: 16, right: 70, zIndex: 100 }}>
-                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600' }} numberOfLines={1}>{item.title}</Text>
-              </View>
-              <Image source={{ uri: item.imageUrl }} style={{ width: '100%', height: '70%' }} resizeMode="contain" />
-            </View>
-          </Modal>
+        {/* Галерея: свайп между всеми фото товара */}
+        {showGallery && (
+          <ImageGallery
+            visible={showGallery}
+            images={allImages}
+            title={item.title}
+            onClose={() => setShowGallery(false)}
+          />
         )}
       </View>
     </>

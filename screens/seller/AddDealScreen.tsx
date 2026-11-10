@@ -9,6 +9,9 @@ import { styles } from '../../components/styles';
 import { AddressPickerModal } from '../../components/AddressPickerModal';
 import { compressToBase64 } from '../../utils/imageToBase64';
 
+const MAX_PHOTOS = 5;
+const PHOTO_BUDGET_KB = 750; // общий вес всех фото товара
+
 const CITY_COORDS: Record<string, { lat: number, lng: number }> = {
   'Алматы': { lat: 43.2220, lng: 76.8512 },
   'Астана': { lat: 51.1801, lng: 71.4460 },
@@ -34,7 +37,6 @@ const CATEGORIES = [
   { id: 'beauty', label: 'Косметика и парфюм', emoji: '💄' },
 ];
 
-// Стабильное смещение метки (вместо Math.random)
 const hashOffset = (str: string) => {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
@@ -53,7 +55,7 @@ export function AddDealScreen({ user }: { user: User }) {
   const [store, setStore] = useState('');
   const [city, setCity] = useState('');
   const [cat, setCat] = useState('clothing');
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]); // [0] = главное фото
   const [imageAspect, setImageAspect] = useState<[number, number]>([4, 5]);
   const [hasDelivery, setHasDelivery] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -91,7 +93,24 @@ export function AddDealScreen({ user }: { user: User }) {
     ? Math.round((1 - Number(newPrice) / Number(oldPrice)) * 100)
     : 0;
 
-  const pickMainImage = async () => {
+  // ===== Фото товара (1–5) =====
+  const addPhotos = async () => {
+    const left = MAX_PHOTOS - photos.length;
+    if (left <= 0) return Alert.alert('Максимум', `Можно загрузить не больше ${MAX_PHOTOS} фото`);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return Alert.alert('Нет доступа к фото');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsMultipleSelection: true,
+      selectionLimit: left,
+      quality: 1,
+    });
+    if (result.canceled) return;
+    const uris = result.assets.map(a => a.uri).slice(0, left);
+    setPhotos(prev => [...prev, ...uris]);
+  };
+
+  const replacePhoto = async (i: number) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return Alert.alert('Нет доступа к фото');
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -100,7 +119,20 @@ export function AddDealScreen({ user }: { user: User }) {
       aspect: imageAspect,
       quality: 1,
     });
-    if (!result.canceled) setImageUri(result.assets[0].uri);
+    if (result.canceled) return;
+    setPhotos(prev => prev.map((p, idx) => idx === i ? result.assets[0].uri : p));
+  };
+
+  const removePhoto = (i: number) => setPhotos(prev => prev.filter((_, idx) => idx !== i));
+
+  const movePhoto = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= photos.length) return;
+    setPhotos(prev => {
+      const copy = [...prev];
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+      return copy;
+    });
   };
 
   const pickColorImage = async (color: string, istech = false) => {
@@ -117,7 +149,6 @@ export function AddDealScreen({ user }: { user: User }) {
     }
   };
 
-  // Фото цветов -> лёгкий base64 (виден всем пользователям)
   const colorsToBase64 = async (list: { color: string, imageUri?: string }[]) =>
     Promise.all(list.map(async v => ({
       color: v.color,
@@ -135,14 +166,17 @@ export function AddDealScreen({ user }: { user: User }) {
     }
     setLoading(true);
     try {
-      // Главное фото: сжатие с сохранением пропорций
-      let imageUrl: string | null = null;
-      if (imageUri) {
-        imageUrl = await compressToBase64(imageUri, {
-          maxWidth: imageAspect[0] === 16 ? 900 : 700,
-          maxBytes: 380 * 1024,
-        });
+      // Сжимаем все фото; чем их больше, тем легче каждое, чтобы влезть в лимит документа
+      const perPhotoKB = Math.min(380, Math.floor(PHOTO_BUDGET_KB / Math.max(photos.length, 1)));
+      const compressed: string[] = [];
+      for (let i = 0; i < photos.length; i++) {
+        compressed.push(await compressToBase64(photos[i], {
+          maxWidth: i === 0 ? (imageAspect[0] === 16 ? 900 : 700) : 800,
+          maxBytes: perPhotoKB * 1024,
+        }));
       }
+      const imageUrl = compressed[0] || null;
+      const extraImages = compressed.slice(1);
 
       const cityCoords = CITY_COORDS[city] || CITY_COORDS['Алматы'];
       const off = hashOffset(user.uid + city);
@@ -151,7 +185,9 @@ export function AddDealScreen({ user }: { user: User }) {
         oldPrice: Number(oldPrice),
         newPrice: Number(newPrice),
         marketPrice: marketPrice ? Number(marketPrice) : null,
-        discount, store, city, imageUrl,
+        discount, store, city,
+        imageUrl,
+        extraImages,
         imageAspect,
         hasDelivery,
         category: cat,
@@ -191,7 +227,7 @@ export function AddDealScreen({ user }: { user: User }) {
       await addDoc(collection(db, 'deals'), { ...baseData, ...categoryData });
       Alert.alert('✅ Скидка добавлена!', 'Ваша скидка опубликована');
       setTitle(''); setDescription(''); setOldPrice(''); setNewPrice('');
-      setMarketPrice(''); setStore(''); setCity(''); setImageUri(null);
+      setMarketPrice(''); setStore(''); setCity(''); setPhotos([]);
       setSelectedSizes([]); setOutOfStockSizes([]); setFoodTags([]); setMenuItems([]);
       setColorVariants([]); setTechColors([]);
       setExactAddress(''); setDealLat(null); setDealLng(null);
@@ -276,7 +312,7 @@ export function AddDealScreen({ user }: { user: User }) {
 
       {/* Фото */}
       <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 14 }}>
-        <Text style={styles.label}>Формат фото</Text>
+        <Text style={styles.label}>Формат главного фото</Text>
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
           <TouchableOpacity
             onPress={() => setImageAspect([4, 5])}
@@ -296,16 +332,80 @@ export function AddDealScreen({ user }: { user: User }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Фото товара</Text>
-        <TouchableOpacity onPress={pickMainImage} style={styles.imagePicker}>
-          {imageUri
-            ? <Image source={{ uri: imageUri }} style={{ width: '100%', height: imageAspect[0] === 16 ? 180 : 240, borderRadius: 12 }} resizeMode="cover" />
-            : <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                <Ionicons name="camera" size={40} color="#FF4500" />
-                <Text style={{ color: '#FF4500', fontWeight: '600', marginTop: 8 }}>Добавить фото</Text>
-              </View>
-          }
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <Text style={styles.label}>Фото товара</Text>
+          <Text style={{ color: '#999', fontSize: 12 }}>{photos.length} / {MAX_PHOTOS}</Text>
+        </View>
+        <Text style={{ color: '#999', fontSize: 12, marginBottom: 10 }}>
+          От 1 до {MAX_PHOTOS} фото. Первое — главное, оно видно в карточке. Остальные покупатель увидит при открытии фото.
+        </Text>
+
+        {photos.length === 0 ? (
+          <TouchableOpacity onPress={addPhotos} style={styles.imagePicker}>
+            <View style={{ alignItems: 'center', paddingVertical: 30 }}>
+              <Ionicons name="camera" size={40} color="#FF4500" />
+              <Text style={{ color: '#FF4500', fontWeight: '600', marginTop: 8 }}>Добавить фото</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingVertical: 4 }}>
+              {photos.map((uri, i) => (
+                <View key={uri + i} style={{ width: 130 }}>
+                  <View style={{ width: 130, height: 160, borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: i === 0 ? '#FF4500' : '#eee' }}>
+                    <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                    {i === 0 && (
+                      <View style={{ position: 'absolute', top: 6, left: 6, backgroundColor: '#FF4500', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                        <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>Главное</Text>
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      onPress={() => removePhoto(i)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}
+                    >
+                      <Ionicons name="close" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => movePhoto(i, -1)}
+                      disabled={i === 0}
+                      style={{ width: 36, height: 32, borderRadius: 10, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', opacity: i === 0 ? 0.35 : 1 }}
+                    >
+                      <Ionicons name="arrow-back" size={18} color="#555" />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => replacePhoto(i)} style={{ paddingHorizontal: 8, height: 32, borderRadius: 10, backgroundColor: '#FFF0EB', justifyContent: 'center' }}>
+                      <Text style={{ color: '#FF4500', fontWeight: '700', fontSize: 12 }}>Заменить</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => movePhoto(i, 1)}
+                      disabled={i === photos.length - 1}
+                      style={{ width: 36, height: 32, borderRadius: 10, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center', opacity: i === photos.length - 1 ? 0.35 : 1 }}
+                    >
+                      <Ionicons name="arrow-forward" size={18} color="#555" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+
+              {photos.length < MAX_PHOTOS && (
+                <TouchableOpacity
+                  onPress={addPhotos}
+                  style={{ width: 130, height: 160, borderRadius: 12, borderWidth: 2, borderColor: '#FF4500', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFF8F5' }}
+                >
+                  <Ionicons name="add-circle" size={36} color="#FF4500" />
+                  <Text style={{ color: '#FF4500', fontWeight: '700', marginTop: 4, fontSize: 13 }}>Добавить</Text>
+                  <Text style={{ color: '#aaa', fontSize: 11 }}>ещё {MAX_PHOTOS - photos.length}</Text>
+                </TouchableOpacity>
+              )}
+            </ScrollView>
+            <Text style={{ color: '#aaa', fontSize: 11, marginTop: 8 }}>
+              Стрелками меняется порядок. Фото на первом месте станет главным.
+            </Text>
+          </>
+        )}
       </View>
 
       {/* Доставка */}
