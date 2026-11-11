@@ -21,6 +21,7 @@ import { BuyerChatsScreen } from './BuyerChatsScreen';
 import { PromotionScreen } from './seller/PromotionScreen';
 import { PrivacyPolicyScreen } from './PrivacyPolicyScreen';
 import { SocialLinks } from '../components/SocialLinks';
+import { DeleteAccountModal } from '../components/DeleteAccountModal';
 import { isBadgeActive, fmtDate } from '../utils/verification';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -46,6 +47,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
   const [agreedToPolicy, setAgreedToPolicy] = useState(false);
   const [sellerAgreed, setSellerAgreed] = useState(false);
   const [showPolicy, setShowPolicy] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const [loading, setLoading] = useState(false);
   const [screen, setScreen] = useState<ScreenType>('profile');
   const [sellerProfile, setSellerProfile] = useState<any>(null);
@@ -67,9 +69,9 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     if (!user || userRole !== 'seller') return;
     const unsubProfile = onSnapshot(doc(db, 'users', user.uid), snap => {
       if (snap.exists()) setSellerProfile(snap.data());
-    });
+    }, () => {});
     const q = query(collection(db, 'deals'), where('sellerId', '==', user.uid));
-    const unsubDeals = onSnapshot(q, snap => setSellerDeals(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubDeals = onSnapshot(q, snap => setSellerDeals(snap.docs.map(d => ({ id: d.id, ...d.data() }))), () => {});
     return () => { unsubProfile(); unsubDeals(); };
   }, [user, userRole]);
 
@@ -79,7 +81,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
       const favs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setBuyerFavs(favs);
       setBuyerSavings(Math.round(favs.reduce((sum: number, d: any) => sum + ((d.oldPrice || 0) - (d.newPrice || 0)), 0) / 1000));
-    });
+    }, () => {});
   }, [user, userRole]);
 
   useEffect(() => {
@@ -90,7 +92,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
       setActiveOrdersCount(snap.docs.filter(d =>
         d.data().status !== 'delivered' && d.data().status !== 'buyer_confirmed'
       ).length);
-    });
+    }, () => {});
   }, [user, userRole]);
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
       setSupportDeals(
         snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((d: any) => !d.isHidden).slice(0, 50)
       );
-    });
+    }, () => {});
   }, [user, userRole]);
 
   const BackBtn = () => (
@@ -177,11 +179,27 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
     }
   };
 
-  // Окно политики конфиденциальности (используется в продавце)
   const policyModal = (
     <Modal visible={showPolicy} animationType="slide" onRequestClose={() => setShowPolicy(false)}>
       <PrivacyPolicyScreen onClose={() => setShowPolicy(false)} />
     </Modal>
+  );
+
+  // Кнопка удаления аккаунта (одинаковая у покупателя и продавца)
+  const deleteButton = (
+    <TouchableOpacity
+      style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2, borderWidth: 1, borderColor: '#FECACA' }}
+      onPress={() => setShowDelete(true)}
+    >
+      <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center' }}>
+        <Ionicons name="trash-outline" size={22} color="#EF4444" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontWeight: '700', color: '#EF4444', fontSize: 15 }}>Удалить аккаунт</Text>
+        <Text style={{ color: '#999', fontSize: 12 }}>Безвозвратно удалить аккаунт и данные</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#ccc" />
+    </TouchableOpacity>
   );
 
   // ===== ЗАЛОГИНЕН =====
@@ -239,7 +257,6 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
             </View>
           </View>
 
-          {/* Значок подтверждённого бизнеса */}
           {badgeOn ? (
             <View style={{ backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', marginBottom: 14 }}>
               <Ionicons name="checkmark-circle" size={20} color="#1D9BF0" />
@@ -399,7 +416,6 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
             <Ionicons name="chevron-forward" size={18} color="#ccc" />
           </TouchableOpacity>
 
-          {/* Политика конфиденциальности (продавец) */}
           <TouchableOpacity style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2 }} onPress={() => setShowPolicy(true)}>
             <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' }}>
               <Ionicons name="document-text" size={22} color="#3B82F6" />
@@ -413,6 +429,8 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
 
           <SocialLinks />
 
+          {deleteButton}
+
           <TouchableOpacity style={{ backgroundColor: '#FFF0EB', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }} onPress={() => signOut(auth)}>
             <Ionicons name="log-out-outline" size={20} color="#FF4500" />
             <Text style={{ color: '#FF4500', fontWeight: '700', fontSize: 15 }}>Выйти из аккаунта</Text>
@@ -420,6 +438,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
         </View>
       </ScrollView>
       {policyModal}
+      <DeleteAccountModal visible={showDelete} user={user} role="seller" onClose={() => setShowDelete(false)} />
       </>
       );
     }
@@ -531,7 +550,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
               onPress={() => {
                 Alert.alert('🆘 Поддержка и жалобы', 'Выберите тему обращения:', [
                   { text: '❌ Неработающая скидка', onPress: () => sendSupport('Неработающая скидка') },
-                  { text: '�� Неверная цена', onPress: () => sendSupport('Неверная цена') },
+                  { text: '💰 Неверная цена', onPress: () => sendSupport('Неверная цена') },
                   { text: '🏪 Закрытый магазин', onPress: () => sendSupport('Закрытый магазин') },
                   { text: '📋 Недостоверная информация', onPress: () => sendSupport('Недостоверная информация') },
                   { text: 'Отмена', style: 'cancel' },
@@ -548,7 +567,20 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
               <Ionicons name="chevron-forward" size={18} color="#ccc" />
             </TouchableOpacity>
 
+            <TouchableOpacity style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 14, elevation: 2 }} onPress={() => setShowPolicy(true)}>
+              <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="document-text" size={22} color="#3B82F6" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: '700', color: '#1a1a1a', fontSize: 15 }}>Политика конфиденциальности</Text>
+                <Text style={{ color: '#999', fontSize: 12 }}>Обработка персональных данных</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#ccc" />
+            </TouchableOpacity>
+
             <SocialLinks />
+
+            {deleteButton}
 
             <TouchableOpacity style={{ backgroundColor: '#FFF0EB', borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 }} onPress={() => signOut(auth)}>
               <Ionicons name="log-out-outline" size={20} color="#FF4500" />
@@ -556,6 +588,9 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {policyModal}
+        <DeleteAccountModal visible={showDelete} user={user} role="buyer" onClose={() => setShowDelete(false)} />
 
         <Modal visible={showSupportModal} transparent animationType="slide" onRequestClose={() => setShowSupportModal(false)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
@@ -824,7 +859,6 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
           />
         )}
 
-        {/* Согласие продавца с политикой конфиденциальности */}
         {selectedRole === 'seller' && (
           <>
             <TouchableOpacity
