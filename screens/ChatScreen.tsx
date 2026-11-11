@@ -39,7 +39,7 @@ export function ChatScreen({ user, chatId, otherUserId, otherUserName, dealTitle
   const [showQuickReplies, setShowQuickReplies] = useState(false);
 
   useEffect(() => {
-    getDoc(doc(db, 'users', otherUserId)).then(snap => {
+    getDoc(doc(db, 'publicProfiles', otherUserId)).then(snap => {
       if (snap.exists()) setOtherProfile(snap.data());
     });
   }, [otherUserId]);

@@ -79,7 +79,7 @@ function HappyHoursBanner() {
       const profiles: Record<string, any> = {};
       for (const hh of all) {
         if (hh.sellerId && !profiles[hh.sellerId]) {
-          const snap2 = await getDoc(doc(db, 'users', hh.sellerId));
+          const snap2 = await getDoc(doc(db, 'publicProfiles', hh.sellerId));
           if (snap2.exists()) profiles[hh.sellerId] = snap2.data();
         }
       }
@@ -220,7 +220,7 @@ export function HomeScreen({ user, userCity, userRole }: {
   }, []);
 
   useEffect(() => {
-    return onSnapshot(collection(db, 'users'), snap => {
+    return onSnapshot(collection(db, 'publicProfiles'), snap => {
       const now = new Date().toISOString();
       setActiveBanners(
         snap.docs

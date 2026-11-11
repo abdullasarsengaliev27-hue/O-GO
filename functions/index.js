@@ -1,231 +1,176 @@
-const functions = require('firebase-functions');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { setGlobalOptions } = require('firebase-functions/v2');
+const { defineSecret } = require('firebase-functions/params');
 const admin = require('firebase-admin');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 admin.initializeApp();
 const db = admin.firestore();
 
-const GEMINI_API_KEY = 'YOUR_API_KEY_HERE';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+// Регион должен совпадать с utils/functions.ts. Если при деплое триггер Firestore
+// ругается на регион, укажи регион своей базы (Firestore → Данные → расположение).
+const REGION = 'us-central1';
+setGlobalOptions({ region: REGION, maxInstances: 10 });
 
-// Вспомогательная функция — получаем все скидки из Firestore
-async function getDeals(city) {
-  const snap = await db.collection('deals').get();
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .filter(d => !d.isHidden)
-    .filter(d => !city || city === 'Все' || d.city === city);
+const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
+const GEMINI_MODEL = 'gemini-2.5-flash'; // проверь актуальное имя в aistudio.google.com
+const AI_DAILY_LIMIT = 60;
+
+// ===== Публичный профиль магазина =====
+const PUBLIC_FIELDS = [
+  'storeName', 'storeLogo', 'storeCategory', 'storeDescription', 'storeAddress', 'storePhone', 'city',
+  'verifiedFree', 'verifiedUntil', 'businessChecked',
+  'mapHighlighted', 'mapHighlightedUntil', 'hasBanner', 'bannerUntil', 'bannerImage', 'isBlocked',
+];
+
+function pickPublic(u) {
+  const out = { role: 'seller', updatedAt: new Date().toISOString() };
+  PUBLIC_FIELDS.forEach(k => { if (u[k] !== undefined) out[k] = u[k]; });
+  return out;
 }
 
-// 1. AI Chat — поиск по запросу
-exports.aiChat = functions.https.onCall(async (data) => {
-  const { message, city } = data;
-  if (!message) throw new functions.https.HttpsError('invalid-argument', 'Message required');
-
-  try {
-    const deals = await getDeals(city);
-    const dealsContext = deals.slice(0, 100).map(d =>
-      `ID:${d.id}|${d.title}|${d.category}|${d.newPrice}₸|скидка:${d.discount}%|магазин:${d.store}|город:${d.city}`
-    ).join('\n');
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const prompt = `Ты AI-ассистент приложения O-GO — агрегатора скидок Казахстана.
-
-Запрос пользователя: "${message}"
-Город пользователя: ${city || 'не указан'}
-
-Доступные товары в каталоге:
-${dealsContext}
-
-Задача:
-1. Пойми что ищет пользователь (категория, бюджет, предпочтения)
-2. Найди подходящие товары из каталога выше
-3. Верни ответ ТОЛЬКО в JSON формате:
-{
-  "reply": "текст ответа пользователю на русском",
-  "dealIds": ["id1", "id2", "id3"]
-}
-
-Правила:
-- dealIds — только ID товаров из каталога выше которые подходят запросу
-- Если ничего не найдено — dealIds: []
-- Не придумывай товары которых нет в каталоге
-- Учитывай бюджет если указан
-- Отвечай на том языке на котором написан запрос`;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-
-    const foundDeals = deals.filter(d => parsed.dealIds?.includes(d.id));
-    return { reply: parsed.reply, deals: foundDeals };
-  } catch (e) {
-    throw new functions.https.HttpsError('internal', e.message);
+exports.syncPublicProfile = onDocumentWritten('users/{uid}', async (event) => {
+  const uid = event.params.uid;
+  const after = event.data && event.data.after && event.data.after.exists ? event.data.after.data() : null;
+  const ref = db.collection('publicProfiles').doc(uid);
+  if (!after || after.role !== 'seller') {
+    await ref.delete().catch(() => {});
+    return;
   }
+  await ref.set(pickPublic(after));
 });
 
-// 2. Smart Price Comparison
-exports.comparePrice = functions.https.onCall(async (data) => {
-  const { query, city } = data;
-  if (!query) throw new functions.https.HttpsError('invalid-argument', 'Query required');
-
-  try {
-    const deals = await getDeals(city);
-    const dealsContext = deals.map(d =>
-      `ID:${d.id}|${d.title}|${d.category}|${d.newPrice}₸|${d.oldPrice}₸|скидка:${d.discount}%|магазин:${d.store}|город:${d.city}|описание:${d.description || ''}`
-    ).join('\n');
-
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const prompt = `Ты AI-ассистент для сравнения цен в приложении O-GO.
-
-Пользователь ищет: "${query}"
-
-Все товары в каталоге:
-${dealsContext}
-
-Найди товары которые являются ОДНИМ И ТЕМ ЖЕ товаром у разных продавцов (одинаковый бренд, модель, характеристики).
-НЕ включай просто похожие товары — только идентичные.
-
-Верни ТОЛЬКО JSON:
-{
-  "summary": "краткое описание что нашёл",
-  "dealIds": ["id1", "id2"]
+async function assertAdmin(req) {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Войдите в аккаунт');
+  const a = await db.collection('admins').doc(req.auth.uid).get();
+  if (!a.exists) throw new HttpsError('permission-denied', 'Только для администратора');
 }
 
-dealIds отсортируй по цене от дешёвого к дорогому.
-Если одинаковых товаров нет — верни dealIds: [] и объясни в summary.`;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-
-    const foundDeals = deals
-      .filter(d => parsed.dealIds?.includes(d.id))
-      .sort((a, b) => Number(a.newPrice) - Number(b.newPrice));
-
-    return { summary: parsed.summary, deals: foundDeals };
-  } catch (e) {
-    throw new functions.https.HttpsError('internal', e.message);
+// Разовое заполнение для уже существующих продавцов (кнопка в админке)
+exports.backfillPublicProfiles = onCall(async (req) => {
+  await assertAdmin(req);
+  const snap = await db.collection('users').where('role', '==', 'seller').get();
+  let count = 0;
+  for (const d of snap.docs) {
+    await db.collection('publicProfiles').doc(d.id).set(pickPublic(d.data()));
+    count++;
   }
+  return { count };
 });
 
-// 3. Smart Shopping List
-exports.analyzeShoppingList = functions.https.onCall(async (data) => {
-  const { items, budget, city } = data;
-  if (!items || !budget) throw new functions.https.HttpsError('invalid-argument', 'Items and budget required');
+// ===== Kaspi-реквизиты продавца (только вошедшему, по одному продавцу) =====
+exports.getSellerPayment = onCall(async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Войдите в аккаунт');
+  const sellerId = req.data && req.data.sellerId;
+  if (typeof sellerId !== 'string' || !sellerId) throw new HttpsError('invalid-argument', 'Нет продавца');
+  const s = await db.collection('users').doc(sellerId).get();
+  if (!s.exists || s.data().role !== 'seller') return null;
+  const u = s.data();
+  if (!u.kaspiPhone || !u.kaspiName) return null;
+  return { phone: u.kaspiPhone, name: u.kaspiName };
+});
 
-  try {
-    const deals = await getDeals(city);
-    const dealsContext = deals.map(d =>
-      `ID:${d.id}|${d.title}|${d.category}|${d.newPrice}₸|скидка:${d.discount}%|магазин:${d.store}`
-    ).join('\n');
+// ===== Заказы: все изменения статуса только здесь =====
+const FLOW = ['pending', 'accepted', 'packed', 'sent', 'delivered'];
+const clip = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const prompt = `Ты AI-ассистент для умного списка покупок в приложении O-GO Казахстан.
+exports.orderAction = onCall(async (req) => {
+  if (!req.auth) throw new HttpsError('unauthenticated', 'Войдите в аккаунт');
+  const { orderId, action, data } = req.data || {};
+  if (typeof orderId !== 'string' || !orderId) throw new HttpsError('invalid-argument', 'Нет заказа');
+  const uid = req.auth.uid;
+  const ref = db.collection('orders').doc(orderId);
 
-Список покупок пользователя: ${items.join(', ')}
-Бюджет: ${budget} ₸
-Город: ${city || 'не указан'}
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'Заказ не найден');
+    const o = snap.data();
+    const now = new Date().toISOString();
 
-Доступные товары:
-${dealsContext}
+    if (action === 'advance') {
+      if (o.sellerId !== uid) throw new HttpsError('permission-denied', 'Это не ваш заказ');
+      if (o.status === 'awaiting_payment_confirmation') {
+        throw new HttpsError('failed-precondition', 'Сначала подтвердите получение оплаты');
+      }
+      const i = FLOW.indexOf(o.status);
+      if (i < 0 || i === FLOW.length - 1) throw new HttpsError('failed-precondition', 'Статус нельзя изменить');
+      const next = FLOW[i + 1];
+      const upd = { status: next, updatedAt: now, ['statusHistory.' + next]: now };
 
-Для КАЖДОГО пункта из списка найди САМЫЙ ДЕШЁВЫЙ подходящий товар из каталога.
-Посчитай общую сумму.
+      if (next === 'packed' || next === 'sent') {
+        const d = data || {};
+        const courierPhone = clip(d.courierPhone, 40) || o.courierPhone || '';
+        const deliveryDate = clip(d.deliveryDate, 120) || o.deliveryDate || '';
+        const deliveryNote = clip(d.deliveryNote, 500);
+        const okPhoto = typeof d.packagingPhoto === 'string'
+          && d.packagingPhoto.startsWith('data:image/') && d.packagingPhoto.length <= 700000;
+        const photo = okPhoto ? d.packagingPhoto : (o.packagingPhoto || null);
+        if (next === 'sent') {
+          if (!courierPhone || !deliveryDate) throw new HttpsError('failed-precondition', 'Укажите телефон курьера и время доставки');
+          if (!photo) throw new HttpsError('failed-precondition', 'Добавьте фото упаковки');
+        }
+        Object.assign(upd, { courierPhone, deliveryDate, deliveryNote });
+        if (photo) { upd.packagingPhoto = photo; upd.packagingPhotoAt = o.packagingPhotoAt || now; }
+      }
+      tx.update(ref, upd);
 
-Верни ТОЛЬКО JSON:
-{
-  "analysis": "общий анализ — укладывается ли в бюджет",
-  "totalMin": 12345,
-  "withinBudget": true,
-  "recommendations": [
-    {
-      "item": "название из списка пользователя",
-      "dealId": "id товара или null если не найдено",
-      "reason": "почему этот товар подходит"
+    } else if (action === 'confirmPayment') {
+      if (o.sellerId !== uid) throw new HttpsError('permission-denied', 'Это не ваш заказ');
+      if (o.paymentMethod !== 'kaspi' || o.paymentStatus !== 'awaiting_confirmation') {
+        throw new HttpsError('failed-precondition', 'Оплата не ожидает подтверждения');
+      }
+      tx.update(ref, { paymentStatus: 'confirmed', status: 'pending', updatedAt: now });
+
+    } else if (action === 'confirmReceived') {
+      if (o.buyerId !== uid) throw new HttpsError('permission-denied', 'Это не ваш заказ');
+      if (o.status !== 'delivered') throw new HttpsError('failed-precondition', 'Заказ ещё не доставлен');
+      tx.update(ref, { status: 'buyer_confirmed', buyerConfirmedAt: now, updatedAt: now });
+
+    } else {
+      throw new HttpsError('invalid-argument', 'Неизвестное действие');
     }
-  ],
-  "alternatives": "совет если бюджет превышен"
-}`;
-
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-
-    const recommendations = parsed.recommendations.map((rec) => ({
-      ...rec,
-      deal: rec.dealId ? deals.find(d => d.id === rec.dealId) || null : null,
-    }));
-
-    return {
-      analysis: parsed.analysis,
-      totalMin: parsed.totalMin,
-      withinBudget: parsed.withinBudget,
-      recommendations,
-      alternatives: parsed.alternatives,
-    };
-  } catch (e) {
-    throw new functions.https.HttpsError('internal', e.message);
-  }
+  });
+  return { ok: true };
 });
 
-// 4. AI Visual Search
-exports.visualSearch = functions.https.onCall(async (data) => {
-  const { imageBase64, city } = data;
-  if (!imageBase64) throw new functions.https.HttpsError('invalid-argument', 'Image required');
+// ===== Gemini: ключ только на сервере =====
+exports.askGemini = onCall(
+  { secrets: [GEMINI_API_KEY], timeoutSeconds: 60, memory: '512MiB' },
+  async (req) => {
+    if (!req.auth) throw new HttpsError('unauthenticated', 'Войдите в аккаунт, чтобы пользоваться ИИ');
+    const { prompt, imageBase64 } = req.data || {};
+    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 60000) {
+      throw new HttpsError('invalid-argument', 'Некорректный запрос');
+    }
+    if (imageBase64 !== undefined && (typeof imageBase64 !== 'string' || imageBase64.length > 7000000)) {
+      throw new HttpsError('invalid-argument', 'Фото слишком большое');
+    }
 
-  try {
-    const deals = await getDeals(city);
-    const dealsContext = deals.map(d =>
-      `ID:${d.id}|${d.title}|${d.category}|${d.newPrice}₸|скидка:${d.discount}%|магазин:${d.store}`
-    ).join('\n');
+    // Лимит запросов в сутки на пользователя
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const usageRef = db.collection('aiUsage').doc(req.auth.uid + '_' + day);
+    await db.runTransaction(async (tx) => {
+      const u = await tx.get(usageRef);
+      const n = u.exists ? u.data().count : 0;
+      if (n >= AI_DAILY_LIMIT) throw new HttpsError('resource-exhausted', 'Дневной лимит ИИ исчерпан, попробуйте завтра');
+      tx.set(usageRef, { count: n + 1, uid: req.auth.uid, day });
+    });
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-
-    const prompt = `Ты AI-ассистент для визуального поиска товаров в приложении O-GO Казахстан.
-
-Проанализируй изображение и:
-1. Определи что изображено (тип товара, бренд если виден, цвет, стиль)
-2. Найди похожие товары в каталоге ниже
-
-Каталог товаров:
-${dealsContext}
-
-Верни ТОЛЬКО JSON:
-{
-  "detected": "что обнаружено на фото",
-  "category": "категория товара",
-  "dealIds": ["id1", "id2", "id3"]
-}
-
-dealIds — ID похожих товаров из каталога. Максимум 6.`;
-
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          mimeType: 'image/jpeg',
-          data: base64Data,
-        },
-      },
-    ]);
-
-    const text = result.response.text();
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-
-    const foundDeals = deals.filter(d => parsed.dealIds?.includes(d.id));
-    return {
-      detected: parsed.detected,
-      category: parsed.category,
-      deals: foundDeals,
-    };
-  } catch (e) {
-    throw new functions.https.HttpsError('internal', e.message);
+    try {
+      const model = new GoogleGenerativeAI(GEMINI_API_KEY.value()).getGenerativeModel({ model: GEMINI_MODEL });
+      let parts = [prompt];
+      if (imageBase64) {
+        const m = imageBase64.match(/^data:(image\/\w+);base64,/);
+        parts.push({
+          inlineData: { mimeType: m ? m[1] : 'image/jpeg', data: imageBase64.replace(/^data:image\/\w+;base64,/, '') },
+        });
+      }
+      const result = await model.generateContent(parts);
+      return { text: result.response.text() };
+    } catch (e) {
+      console.error('Gemini error', e && e.message);
+      throw new HttpsError('internal', 'ИИ временно недоступен');
+    }
   }
-});
+);

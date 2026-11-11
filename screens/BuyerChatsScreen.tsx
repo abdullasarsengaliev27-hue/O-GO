@@ -36,7 +36,7 @@ export function BuyerChatsScreen({ user }: { user: User }) {
       const found: Record<string, any> = {};
       for (const id of ids) {
         try {
-          const s = await getDoc(doc(db, 'users', id));
+          const s = await getDoc(doc(db, 'publicProfiles', id));
           found[id] = s.exists() ? s.data() : {};
         } catch { found[id] = {}; }
       }

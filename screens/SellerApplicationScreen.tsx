@@ -86,7 +86,7 @@ export function SellerApplicationScreen({ onBack }: { onBack: () => void }) {
       await addDoc(collection(db, 'sellerApplications'), {
         fullName: fullName.trim(),
         phone: phone.trim(),
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         storeName: storeName.trim(),
         storeCategory, city,
         address: address.trim(),

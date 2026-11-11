@@ -24,7 +24,7 @@ export function useSellerVerified(sellerId?: string) {
     const hit = cache.get(sellerId);
     if (hit && Date.now() - hit.t < 60000) { setVerified(hit.v); return; }
     let alive = true;
-    getDoc(doc(db, 'users', sellerId)).then(s => {
+    getDoc(doc(db, 'publicProfiles', sellerId)).then(s => {
       const v = s.exists() ? isBadgeActive(s.data()) : false;
       cache.set(sellerId, { v, t: Date.now() });
       if (alive) setVerified(v);

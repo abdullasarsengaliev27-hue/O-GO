@@ -944,7 +944,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
                   }
                   setLoading(true);
                   try {
-                    const approvedSnap = await getDoc(doc(db, 'approvedSellers', email.trim()));
+                    const approvedSnap = await getDoc(doc(db, 'approvedSellers', email.trim().toLowerCase()));
                     if (!approvedSnap.exists()) {
                       setLoading(false);
                       return Alert.alert('⛔ Нет доступа', 'Регистрация продавца возможна только после одобрения заявки администратором O-GO.\n\nПодайте заявку через кнопку "Подать заявку на продавца".');
@@ -952,7 +952,7 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
                     const approvedData = approvedSnap.data();
                     const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
                     await setDoc(doc(db, 'users', res.user.uid), {
-                      email: email.trim(), role: 'seller',
+                      email: email.trim().toLowerCase(), role: 'seller',
                       storeName: approvedData.storeName,
                       storeAddress: approvedData.storeAddress,
                       storeCategory: approvedData.storeCategory,

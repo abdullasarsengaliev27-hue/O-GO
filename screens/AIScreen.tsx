@@ -8,10 +8,8 @@ import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { DealCard } from '../components/DealCard';
 import * as ImagePicker from 'expo-image-picker';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callFn } from '../utils/functions';
 
-const GEMINI_API_KEY = 'YOUR_API_KEY_HERE';
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const QUICK_PROMPTS = [
   '👟 Найди кроссовки до 20 000 ₸',
@@ -58,18 +56,13 @@ export function AIScreen({ user, userCity }: { user: User | null, userCity?: str
   };
 
   const callGemini = async (prompt: string): Promise<string> => {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    const r = await callFn<{ text: string }>('askGemini', { prompt });
+    return r.text;
   };
 
   const callGeminiWithImage = async (prompt: string, base64: string): Promise<string> => {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { mimeType: 'image/jpeg', data: base64.replace(/^data:image\/\w+;base64,/, '') } },
-    ]);
-    return result.response.text();
+    const r = await callFn<{ text: string }>('askGemini', { prompt, imageBase64: base64 });
+    return r.text;
   };
 
   const parseJSON = (text: string) => {

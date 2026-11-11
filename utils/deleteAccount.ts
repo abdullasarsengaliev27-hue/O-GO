@@ -48,7 +48,7 @@ export async function deleteAccountCompletely(user: User, role: string, password
   }
 
   const uid = user.uid;
-  const email = user.email;
+  const email = user.email.toLowerCase();
 
   // 2. Отзывы пользователя на чужих скидках (пока аккаунт ещё существует)
   await deleteUserReviews(uid, email);

@@ -37,7 +37,7 @@ export function SellerChats({ user }: { user: User }) {
       const found: Record<string, any> = {};
       for (const id of ids) {
         try {
-          const s = await getDoc(doc(db, 'users', id));
+          const s = await getDoc(doc(db, 'publicProfiles', id));
           found[id] = s.exists() ? s.data() : {};
         } catch { found[id] = {}; }
       }
@@ -47,7 +47,7 @@ export function SellerChats({ user }: { user: User }) {
 
   const nameOf = (chat: any) => {
     const p = profiles[chat.otherId] || {};
-    return p.buyerName || p.storeName || p.email?.split('@')[0] || 'Покупатель';
+    return chat.buyerEmail?.split('@')[0] || 'Покупатель';
   };
 
   if (selectedChat) return (

@@ -24,7 +24,7 @@ export function StoreScreen({ sellerId, user, onBack }: Props) {
   const [totalReviews, setTotalReviews] = useState(0);
 
   useEffect(() => {
-    getDoc(doc(db, 'users', sellerId)).then(snap => {
+    getDoc(doc(db, 'publicProfiles', sellerId)).then(snap => {
       if (snap.exists()) setSeller(snap.data());
     });
   }, [sellerId]);

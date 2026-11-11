@@ -93,7 +93,7 @@ export function MapScreen({ user, userCity }: { user: User | null, userCity?: st
   }, []);
 
   useEffect(() => {
-    return onSnapshot(collection(db, 'users'), snap => {
+    return onSnapshot(collection(db, 'publicProfiles'), snap => {
       const now = new Date().toISOString();
       setMapPromotions(
         snap.docs

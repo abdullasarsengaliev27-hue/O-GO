@@ -5,6 +5,7 @@ import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { styles } from './styles';
+import { callFn } from '../utils/functions';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Clipboard from 'expo-clipboard';
@@ -36,16 +37,13 @@ export function OrderModal({ deal, user, visible, onClose }: {
   const fullAddress = [city, street, house, apartment, extraInfo].filter(Boolean).join(', ');
 
   useEffect(() => {
-    if (!deal?.sellerId) return;
-    getDoc(doc(db, 'users', deal.sellerId)).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.kaspiPhone && data.kaspiName) {
-          setSellerKaspi({ phone: data.kaspiPhone, name: data.kaspiName });
-        }
-      }
-    });
-  }, [deal?.sellerId]);
+    if (!deal?.sellerId || !visible || !user) return;
+    let alive = true;
+    callFn<{ phone: string, name: string } | null>('getSellerPayment', { sellerId: deal.sellerId })
+      .then(r => { if (alive && r && r.phone && r.name) setSellerKaspi({ phone: r.phone, name: r.name }); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [deal?.sellerId, visible, user?.uid]);
 
   const reset = () => {
     setStep(1); setSelectedSize(''); setSelectedColor('');

@@ -90,7 +90,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
   const approveApplication = async (app: any) => {
     setBusy(true);
     try {
-      const email = (app.email || '').trim();
+      const email = (app.email || '').trim().toLowerCase();
       await setDoc(doc(db, 'approvedSellers', email), {
         email,
         storeName: app.storeName,
@@ -119,7 +119,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
         status: 'rejected', rejectedAt: new Date().toISOString(), rejectReason: rejectReason.trim(),
       });
       // Если раньше был одобрен — закрываем доступ
-      await deleteDoc(doc(db, 'approvedSellers', (app.email || '').trim())).catch(() => {});
+      await deleteDoc(doc(db, 'approvedSellers', (app.email || '').trim().toLowerCase())).catch(() => {});
       setSelectedApp(null); setRejectReason('');
       Alert.alert('❌ Заявка отклонена');
     } catch (e: any) { Alert.alert('Ошибка', e.message); }
@@ -172,7 +172,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
           try {
             await setSellerDealsHidden(seller.id, true);
             await updateDoc(doc(db, 'users', seller.id), { role: 'buyer', isApproved: false, unlinkedAt: new Date().toISOString() });
-            if (seller.email) await deleteDoc(doc(db, 'approvedSellers', seller.email)).catch(() => {});
+            if (seller.email) await deleteDoc(doc(db, 'approvedSellers', seller.email.toLowerCase())).catch(() => {});
             const app = applications.find(a => (a.email || '').toLowerCase() === (seller.email || '').toLowerCase());
             if (app) await updateDoc(doc(db, 'sellerApplications', app.id), { status: 'rejected', rejectReason: 'Доступ отозван администратором', rejectedAt: new Date().toISOString() });
             setSelectedSeller(null);
@@ -195,7 +195,7 @@ export function AdminScreen({ onBack }: { onBack: () => void }) {
           try {
             const snap = await getDocs(query(collection(db, 'deals'), where('sellerId', '==', seller.id)));
             for (const d of snap.docs) await deleteDoc(d.ref);
-            if (seller.email) await deleteDoc(doc(db, 'approvedSellers', seller.email)).catch(() => {});
+            if (seller.email) await deleteDoc(doc(db, 'approvedSellers', seller.email.toLowerCase())).catch(() => {});
             const app = applications.find(a => (a.email || '').toLowerCase() === (seller.email || '').toLowerCase());
             if (app) await updateDoc(doc(db, 'sellerApplications', app.id), { status: 'rejected', rejectReason: 'Аккаунт удалён администратором', rejectedAt: new Date().toISOString() });
             await deleteDoc(doc(db, 'users', seller.id));

@@ -7,6 +7,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, setDoc } 
 import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { styles } from '../components/styles';
+import { callFn } from '../utils/functions';
 
 export type OrderStatus = 'pending' | 'accepted' | 'packed' | 'sent' | 'delivered' | 'buyer_confirmed';
 
@@ -254,10 +255,8 @@ function BuyerOrderCard({ order }: { order: any }) {
                     {
                       text: '✅ Да, получил!',
                       onPress: async () => {
-                        await updateDoc(doc(db, 'orders', order.id), {
-                          status: 'buyer_confirmed',
-                          buyerConfirmedAt: new Date().toISOString(),
-                        });
+                        try { await callFn('orderAction', { orderId: order.id, action: 'confirmReceived' }); }
+                        catch (e: any) { return Alert.alert('Ошибка', e.message); }
                         Alert.alert('🎉 Отлично!', 'Заказ успешно завершён!\nСпасибо что пользуетесь O-GO!');
                       }
                     }
@@ -392,16 +391,15 @@ function SellerOrderCard({ order }: { order: any }) {
     if (isSentStep && !packagingPhoto) return Alert.alert('Добавьте фото упаковки', 'Покупатель должен увидеть, как упакован его товар.');
     setLoading(true);
     try {
-      const now = new Date().toISOString();
-      await updateDoc(doc(db, 'orders', order.id), {
-        status: nextStatus,
-        ...(isDeliveryStep ? {
+      await callFn('orderAction', {
+        orderId: order.id,
+        action: 'advance',
+        data: isDeliveryStep ? {
           courierPhone: courierPhone.trim(),
           deliveryDate: deliveryDate.trim(),
           deliveryNote: deliveryNote.trim(),
-          ...(packagingPhoto ? { packagingPhoto, packagingPhotoAt: order.packagingPhotoAt || now } : {}),
-        } : {}),
-        updatedAt: now,
+          packagingPhoto: packagingPhoto || null,
+        } : {},
       });
     } catch (e: any) { Alert.alert('Ошибка', e.message); }
     setLoading(false);
@@ -469,11 +467,8 @@ function SellerOrderCard({ order }: { order: any }) {
               {order.paymentStatus === 'awaiting_confirmation' && (
                 <TouchableOpacity
                   onPress={async () => {
-                    await updateDoc(doc(db, 'orders', order.id), {
-                      paymentStatus: 'confirmed',
-                      status: 'pending',
-                      updatedAt: new Date().toISOString(),
-                    });
+                    try { await callFn('orderAction', { orderId: order.id, action: 'confirmPayment' }); }
+                    catch (e: any) { return Alert.alert('Ошибка', e.message); }
                     Alert.alert('✅ Оплата подтверждена!');
                   }}
                   style={{ backgroundColor: '#4CAF50', borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 10 }}
