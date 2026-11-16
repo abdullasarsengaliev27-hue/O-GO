@@ -8,6 +8,7 @@ import { db } from '../firebase/config';
 import { User } from 'firebase/auth';
 import { styles } from '../components/styles';
 import { callFn } from '../utils/functions';
+import { compressToBase64 } from '../utils/imageToBase64';
 
 export type OrderStatus = 'pending' | 'accepted' | 'packed' | 'sent' | 'delivered' | 'buyer_confirmed';
 
@@ -91,23 +92,11 @@ async function pickAndCompressPhoto(): Promise<string | null> {
   const result = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
     allowsEditing: false,
-    quality: 0.8,
+    quality: 1,
   });
   if (result.canceled) return null;
   try {
-    const resized = await ImageManipulator.manipulateAsync(
-      result.assets[0].uri,
-      [{ resize: { width: 800 } }],
-      { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
-    );
-    const response = await fetch(resized.uri);
-    const blob = await response.blob();
-    const reader = new FileReader();
-    return await new Promise<string>((resolve, reject) => {
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Не удалось прочитать фото'));
-      reader.readAsDataURL(blob);
-    });
+    return await compressToBase64(result.assets[0].uri, { maxWidth: 1000, maxBytes: 420 * 1024 });
   } catch {
     Alert.alert('Ошибка', 'Не удалось обработать фото. Попробуй другое.');
     return null;

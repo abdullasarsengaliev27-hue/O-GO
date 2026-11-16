@@ -1,34 +1,23 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { collection, query, where, onSnapshot, getDocs, doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../firebase/config';
 import { User } from 'firebase/auth';
 import { styles } from '../../components/styles';
 
 export function SellerStats({ user }: { user: User }) {
   const [deals, setDeals] = useState<any[]>([]);
-  const [totalFavs, setTotalFavs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'deals'), where('sellerId', '==', user.uid));
-        return onSnapshot(q, async snap => {
-      const myDeals = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setDeals(myDeals);
+    return onSnapshot(q, snap => {
+      setDeals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-      let favCount = 0;
-      const usersSnap = await getDocs(collection(db, 'users'));
-      for (const userDoc of usersSnap.docs) {
-        for (const deal of myDeals) {
-          const favSnap = await getDoc(doc(db, 'users', userDoc.id, 'favorites', deal.id));
-          if (favSnap.exists()) favCount++;
-        }
-      }
-      setTotalFavs(favCount);
-    });
+    }, () => setLoading(false));
   }, [user]);
 
   const deleteDeal = (deal: any) => {
@@ -54,8 +43,9 @@ export function SellerStats({ user }: { user: User }) {
   };
 
   const totalViews = deals.reduce((sum, d) => sum + (d.viewCount || 0), 0);
+  const totalFavs = deals.reduce((sum, d) => sum + Math.max(0, d.favCount || 0), 0);
   const totalSavings = deals.reduce((sum, d) => sum + ((d.oldPrice || 0) - (d.newPrice || 0)), 0);
-  const avgDiscount = deals.length > 0 ? Math.round(deals.reduce((sum, d) => sum + d.discount, 0) / deals.length) : 0;
+  const avgDiscount = deals.length > 0 ? Math.round(deals.reduce((sum, d) => sum + (d.discount || 0), 0) / deals.length) : 0;
   const activeDeals = deals.filter(d => !d.isHidden);
   const hiddenDeals = deals.filter(d => d.isHidden);
 
@@ -65,58 +55,35 @@ export function SellerStats({ user }: { user: User }) {
     </View>
   );
 
+  const Metric = ({ icon, bg, color, value, label, size = 28 }: any) => (
+    <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 16, alignItems: 'center', elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10 }}>
+      <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: bg, justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+        <Ionicons name={icon} size={22} color={color} />
+      </View>
+      <Text style={{ fontSize: size, fontWeight: '900', color }}>{value}</Text>
+      <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>{label}</Text>
+    </View>
+  );
+
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#f5f5f5' }} showsVerticalScrollIndicator={false}>
-      {/* Шапка */}
       <View style={{ backgroundColor: '#FF4500', paddingTop: 20, paddingBottom: 40, paddingHorizontal: 20 }}>
         <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800', marginBottom: 4 }}>📊 Статистика</Text>
         <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14 }}>Аналитика вашего магазина</Text>
       </View>
 
       <View style={{ paddingHorizontal: 16, marginTop: -24 }}>
-        {/* Главные метрики */}
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 16, alignItems: 'center', elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-              <Ionicons name="eye" size={22} color="#FF4500" />
-            </View>
-            <Text style={{ fontSize: 28, fontWeight: '900', color: '#FF4500' }}>{totalViews}</Text>
-            <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Просмотров</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 16, alignItems: 'center', elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#FFF0EB', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-              <Ionicons name="heart" size={22} color="#FF4500" />
-            </View>
-            <Text style={{ fontSize: 28, fontWeight: '900', color: '#FF4500' }}>{totalFavs}</Text>
-            <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>В избранном</Text>
-          </View>
+          <Metric icon="eye" bg="#FFF0EB" color="#FF4500" value={totalViews} label="Просмотров" />
+          <Metric icon="heart" bg="#FFF0EB" color="#FF4500" value={totalFavs} label="В избранном" />
         </View>
 
         <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 16, alignItems: 'center', elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#E8F5E9', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-              <Ionicons name="pricetag" size={22} color="#22C55E" />
-            </View>
-            <Text style={{ fontSize: 28, fontWeight: '900', color: '#22C55E' }}>{activeDeals.length}</Text>
-            <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Активных</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 16, alignItems: 'center', elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#EFF6FF', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-              <Ionicons name="trending-down" size={22} color="#3B82F6" />
-            </View>
-            <Text style={{ fontSize: 28, fontWeight: '900', color: '#3B82F6' }}>{avgDiscount}%</Text>
-            <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Ср. скидка</Text>
-          </View>
-          <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 20, padding: 16, alignItems: 'center', elevation: 4, shadowColor: '#FF4500', shadowOpacity: 0.1, shadowRadius: 10 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: '#F0FFF4', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-              <Ionicons name="wallet" size={22} color="#10B981" />
-            </View>
-            <Text style={{ fontSize: 22, fontWeight: '900', color: '#10B981' }}>{(totalSavings / 1000).toFixed(0)}K</Text>
-            <Text style={{ color: '#999', fontSize: 12, marginTop: 2 }}>Экономия ₸</Text>
-          </View>
+          <Metric icon="pricetag" bg="#E8F5E9" color="#22C55E" value={activeDeals.length} label="Активных" />
+          <Metric icon="trending-down" bg="#EFF6FF" color="#3B82F6" value={`${avgDiscount}%`} label="Ср. скидка" />
+          <Metric icon="wallet" bg="#F0FFF4" color="#10B981" value={`${(totalSavings / 1000).toFixed(0)}K`} label="Экономия ₸" size={22} />
         </View>
 
-        {/* Активные скидки */}
         {activeDeals.length > 0 && (
           <View style={{ marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -124,19 +91,13 @@ export function SellerStats({ user }: { user: User }) {
               <Text style={{ fontSize: 17, fontWeight: '800', color: '#1a1a1a' }}>Активные ({activeDeals.length})</Text>
             </View>
             {activeDeals.map(deal => (
-              <DealManageCard
-                key={deal.id}
-                deal={deal}
-                onDelete={() => deleteDeal(deal)}
-                onToggle={() => toggleDeal(deal)}
-                isDeleting={deletingId === deal.id}
-                isToggling={togglingId === deal.id}
-              />
+              <DealManageCard key={deal.id} deal={deal}
+                onDelete={() => deleteDeal(deal)} onToggle={() => toggleDeal(deal)}
+                isDeleting={deletingId === deal.id} isToggling={togglingId === deal.id} />
             ))}
           </View>
         )}
 
-        {/* Скрытые скидки */}
         {hiddenDeals.length > 0 && (
           <View style={{ marginBottom: 8 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -144,14 +105,9 @@ export function SellerStats({ user }: { user: User }) {
               <Text style={{ fontSize: 17, fontWeight: '800', color: '#999' }}>Скрытые ({hiddenDeals.length})</Text>
             </View>
             {hiddenDeals.map(deal => (
-              <DealManageCard
-                key={deal.id}
-                deal={deal}
-                onDelete={() => deleteDeal(deal)}
-                onToggle={() => toggleDeal(deal)}
-                isDeleting={deletingId === deal.id}
-                isToggling={togglingId === deal.id}
-              />
+              <DealManageCard key={deal.id} deal={deal}
+                onDelete={() => deleteDeal(deal)} onToggle={() => toggleDeal(deal)}
+                isDeleting={deletingId === deal.id} isToggling={togglingId === deal.id} />
             ))}
           </View>
         )}
@@ -172,35 +128,35 @@ export function SellerStats({ user }: { user: User }) {
 
 function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: any) {
   const isHidden = deal.isHidden;
+  const boosted = deal.isBoosted && deal.boostedUntil && new Date(deal.boostedUntil) > new Date();
+  const favs = Math.max(0, deal.favCount || 0);
 
   return (
     <View style={{ backgroundColor: '#fff', borderRadius: 20, marginBottom: 12, overflow: 'hidden', elevation: 3, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 10, opacity: isHidden ? 0.75 : 1 }}>
-<View style={{ height: 4, backgroundColor: isHidden ? '#e0e0e0' : deal.isBoosted ? '#FFD700' : '#FF4500' }} />
+      <View style={{ height: 4, backgroundColor: isHidden ? '#e0e0e0' : boosted ? '#FFD700' : '#FF4500' }} />
 
-{/* Турбо-буст индикатор */}
-{deal.isBoosted && deal.boostedUntil && new Date(deal.boostedUntil) > new Date() && (
-  <View style={{ backgroundColor: '#FFF9E6', borderWidth: 1, borderColor: '#FFD700', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-    <Text style={{ fontSize: 18 }}>🚀</Text>
-    <View style={{ flex: 1 }}>
-      <Text style={{ color: '#F59E0B', fontWeight: '800', fontSize: 13 }}>Турбо-буст активен!</Text>
-      <Text style={{ color: '#999', fontSize: 11 }}>
-        Закреплён в топе до {new Date(deal.boostedUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-      </Text>
-    </View>
-    <View style={{ backgroundColor: '#FFD700', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
-      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>№1 в ленте</Text>
-    </View>
-  </View>
-)}
+      {boosted && (
+        <View style={{ backgroundColor: '#FFF9E6', borderWidth: 1, borderColor: '#FFD700', padding: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ fontSize: 18 }}>🚀</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#F59E0B', fontWeight: '800', fontSize: 13 }}>Турбо-буст активен!</Text>
+            <Text style={{ color: '#999', fontSize: 11 }}>
+              Закреплён в топе до {new Date(deal.boostedUntil).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </Text>
+          </View>
+          <View style={{ backgroundColor: '#FFD700', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 11 }}>№1 в ленте</Text>
+          </View>
+        </View>
+      )}
+
       <View style={{ padding: 14 }}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-          {/* Бейдж */}
           <View style={{ width: 58, height: 58, borderRadius: 16, backgroundColor: isHidden ? '#f0f0f0' : '#FFF0EB', justifyContent: 'center', alignItems: 'center' }}>
             <Text style={{ color: isHidden ? '#aaa' : '#FF4500', fontWeight: '900', fontSize: 14 }}>-{deal.discount}%</Text>
             {deal.hasDelivery && <Text style={{ fontSize: 11 }}>🚚</Text>}
           </View>
 
-          {/* Инфо */}
           <View style={{ flex: 1 }}>
             <Text style={{ fontWeight: '800', color: isHidden ? '#999' : '#1a1a1a', fontSize: 15 }} numberOfLines={1}>{deal.title}</Text>
             <Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>{deal.category} · {deal.city}</Text>
@@ -210,7 +166,6 @@ function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: an
             </View>
           </View>
 
-          {/* Статус */}
           <View style={{ backgroundColor: isHidden ? '#f5f5f5' : '#FFF0EB', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
             <Text style={{ color: isHidden ? '#999' : '#FF4500', fontSize: 11, fontWeight: '700' }}>
               {isHidden ? '🙈 Скрыто' : '✅ Активно'}
@@ -218,7 +173,6 @@ function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: an
           </View>
         </View>
 
-        {/* Аналитика */}
         <View style={{ flexDirection: 'row', gap: 12, marginTop: 10, backgroundColor: '#f8f8f8', borderRadius: 12, padding: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="eye-outline" size={14} color="#FF4500" />
@@ -227,7 +181,7 @@ function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: an
           <View style={{ width: 1, backgroundColor: '#e0e0e0' }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Ionicons name="heart-outline" size={14} color="#FF4500" />
-            <Text style={{ color: '#555', fontSize: 12, fontWeight: '600' }}>в избранном</Text>
+            <Text style={{ color: '#555', fontSize: 12, fontWeight: '600' }}>{favs} в избранном</Text>
           </View>
           {deal.sizes?.length > 0 && (
             <>
@@ -240,12 +194,11 @@ function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: an
           )}
         </View>
 
-        {/* Теги */}
         {(deal.colorVariants?.length > 0 || deal.foodTags?.length > 0 || deal.hasBooking) && (
           <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
             {deal.colorVariants?.length > 0 && (
               <View style={{ backgroundColor: '#FFF0EB', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                <Text style={{ color: '#FF4500', fontSize: 11, fontWeight: '600' }}>�� {deal.colorVariants.length} цветов</Text>
+                <Text style={{ color: '#FF4500', fontSize: 11, fontWeight: '600' }}>🎨 {deal.colorVariants.length} цветов</Text>
               </View>
             )}
             {deal.foodTags?.length > 0 && (
@@ -261,7 +214,6 @@ function DealManageCard({ deal, onDelete, onToggle, isDeleting, isToggling }: an
           </View>
         )}
 
-        {/* Кнопки */}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
           <TouchableOpacity
             onPress={onToggle}
