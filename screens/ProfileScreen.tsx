@@ -769,14 +769,6 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
         <Text style={{ fontSize: 13, fontWeight: '700', color: '#999', marginBottom: 12, letterSpacing: 0.5, textTransform: 'uppercase' }}>🛍 Я покупатель</Text>
 
         <TouchableOpacity
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: 16, paddingVertical: 15, marginBottom: 12, borderWidth: 1.5, borderColor: '#e5e5e5', gap: 10 }}
-          onPress={() => Alert.alert('🔐 Google вход', 'Будет доступен после публикации в App Store.\n\nИспользуйте вход через Email.', [{ text: 'OK' }])}
-        >
-          <Text style={{ fontSize: 18, fontWeight: '800' }}>G</Text>
-          <Text style={{ color: '#333', fontWeight: '700', fontSize: 15 }}>Войти через Google</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
           style={{ backgroundColor: '#FF4500', borderRadius: 16, paddingVertical: 15, alignItems: 'center', marginBottom: 24, elevation: 4 }}
           onPress={() => { setSelectedRole('buyer'); setMode('login'); }}
         >
@@ -797,8 +789,6 @@ export function ProfileScreen({ user, userRole, userCity, onCityChange }: {
         >
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>🏪 Войти как продавец</Text>
         </TouchableOpacity>
-
-        <Text style={{ color: '#ccc', fontSize: 12, textAlign: 'center' }}>Google вход только для покупателей</Text>
 
         <View style={{ marginTop: 20, marginBottom: 20 }}>
           <SocialLinks />

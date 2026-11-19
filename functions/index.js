@@ -14,7 +14,7 @@ const REGION = 'us-central1';
 setGlobalOptions({ region: REGION, maxInstances: 10, invoker: 'public' });
 
 const GEMINI_API_KEY = defineSecret('GEMINI_API_KEY');
-const GEMINI_MODEL = 'gemini-2.5-flash'; // проверь актуальное имя в aistudio.google.com
+const GEMINI_MODEL = 'gemini-3.8-flash'; // проверь актуальное имя в aistudio.google.com
 const AI_DAILY_LIMIT = 60;
 
 // ===== Публичный профиль магазина =====

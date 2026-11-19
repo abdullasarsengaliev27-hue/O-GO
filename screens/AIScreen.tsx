@@ -121,7 +121,7 @@ ${dealsContext}
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         type: 'text',
-        text: '😔 Произошла ошибка. Попробуй ещё раз.',
+        text: '😔 ' + (e?.message || 'Произошла ошибка. Попробуй ещё раз.'),
       }]);
     } finally {
       setLoading(false);
